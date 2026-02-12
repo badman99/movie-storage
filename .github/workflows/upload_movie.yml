@@ -1,4 +1,4 @@
-name: Upload Movie to Release
+name: Validated Stealth DB Sync
 
 on:
   workflow_dispatch:
@@ -6,37 +6,102 @@ on:
       movie_url:
         description: 'Direct Link of the Movie'
         required: true
-      movie_name:
-        description: 'Movie Name (e.g. Jawan.mp4)'
+      movie_id:
+        description: 'Target Movie ID (e.g. 60002)'
         required: true
+      mask_extension:
+        description: 'Mask Extension (.dat, .xapk, .log)'
+        required: true
+        default: '.dat'
 
 jobs:
-  upload:
+  secure-process:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # रिलीज बनाने के लिए परमिशन ज़रूरी है
+      contents: write
 
     steps:
-      # स्टेप 1: रिपॉजिटरी को चेकआउट करना (यही मिसिंग था! 😅)
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # स्टेप 2: मूवी को सर्वर पर डाउनलोड करना
+      # 1. जरूरी टूल्स सेटअप
+      - name: Install Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg mysql-client
+          echo "✅ Tools Installed"
+
+      # 2. वीडियो डाउनलोड
       - name: Download Movie
         run: |
-          curl -L "${{ github.event.inputs.movie_url }}" -o "${{ github.event.inputs.movie_name }}"
-          echo "✅ Downloaded: ${{ github.event.inputs.movie_name }}"
+          curl -L "${{ github.event.inputs.movie_url }}" -o "check_video.mp4"
+          echo "✅ Download Finished"
 
-      # स्टेप 3: रिलीज बनाना और फाइल अपलोड करना
-      - name: Create Release and Upload Movie
+      # 3. 🔥 CRITICAL: वीडियो करप्शन चेक (FFmpeg Logic)
+      - name: Verify Video Integrity
+        id: verify
         run: |
-          # एक यूनिक टैग बनाना (Timestamp के साथ)
-          TAG_NAME="v$(date +'%Y%m%d%H%M%S')"
+          echo "⏳ Checking for corruption..."
+          # ffprobe से चेक करेंगे कि स्ट्रीम्स रीडेबल हैं या नहीं
+          if ! ffprobe -v error -show_format -show_streams "check_video.mp4" ; then
+            echo "🚨 ERROR: Video file is corrupt or invalid!"
+            exit 1
+          fi
           
-          # GitHub CLI का इस्तेमाल करके रिलीज बनाना और फाइल अपलोड करना
-          gh release create "$TAG_NAME" \
-            --title "Movie: ${{ github.event.inputs.movie_name }}" \
-            --notes "Uploaded by Badal's Engine 🎬" \
-            "${{ github.event.inputs.movie_name }}"
+          # एक छोटा सा डिकोड टेस्ट (पहले 5 सेकंड) ताकि पक्का हो सके कि वीडियो चलता है
+          if ! ffmpeg -v error -i "check_video.mp4" -t 5 -f null - ; then
+            echo "🚨 ERROR: Video stream is unplayable!"
+            exit 1
+          fi
+          echo "✅ Video is healthy!"
+
+      # 4. क्वालिटी डिटेक्शन (अगर वेरिफिकेशन पास हुआ तभी यहाँ पहुँचेगा)
+      - name: Detect Quality
+        id: detect
+        run: |
+          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "check_video.mp4")
+          if [ "$HEIGHT" -ge 2160 ]; then LABEL="4K";
+          elif [ "$HEIGHT" -ge 1080 ]; then LABEL="1080p";
+          elif [ "$HEIGHT" -ge 720 ]; then LABEL="720p";
+          else LABEL="480p"; fi
+          echo "quality_label=$LABEL" >> $GITHUB_OUTPUT
+          echo "✅ Quality: $LABEL"
+
+      # 5. भेष बदलना (Masking)
+      - name: Masking
+        id: mask
+        run: |
+          FILENAME="m_id_${{ github.event.inputs.movie_id }}_${{ steps.detect.outputs.quality_label }}${{ github.event.inputs.mask_extension }}"
+          mv "check_video.mp4" "$FILENAME"
+          echo "final_file=$FILENAME" >> $GITHUB_OUTPUT
+
+      # 6. GitHub Release बनाना
+      - name: Create Release
+        id: release
+        run: |
+          TAG="rel_${{ github.event.inputs.movie_id }}_$(date +'%Y%m%d%H%M%S')"
+          gh release create "$TAG" --title "ID: ${{ github.event.inputs.movie_id }}" --notes "Auto Upload" "./${{ steps.mask.outputs.final_file }}"
+          
+          REPO="${{ github.repository }}"
+          ASSET_URL="https://github.com/$REPO/releases/download/$TAG/${{ steps.mask.outputs.final_file }}"
+          echo "final_link=$ASSET_URL" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 7. TiDB डेटाबेस अपडेट (DB Sync)
+      - name: DB Update
+        run: |
+          DB_HOST="db.fr-pari1.bengt.wasmernet.com"
+          DB_PORT="10272"
+          DB_USER="c08b610b7a5780004be5223e9614"
+          DB_PASS="0691c08b-610b-7bfa-8000-977f874d9bfb"
+          DB_NAME="mcinema"
+          
+          M_ID="${{ github.event.inputs.movie_id }}"
+          S_URL="${{ steps.release.outputs.final_link }}"
+          Q_LABEL="${{ steps.detect.outputs.quality_label }}"
+          
+          # डेटाबेस में एंट्री
+          mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e "INSERT INTO streaming_links (movie_id, stream_url, quality_label) VALUES ('$M_ID', '$S_URL', '$Q_LABEL');"
+          
+          echo "🚀 बादल भाई, सब सेट है! वीडियो एकदम असली था और DB में पहुँच गया है।"
