@@ -1,0 +1,31 @@
+name: Badal Pro Movie Engine (VP9 + Hindi Detect)
+
+on:
+  workflow_dispatch:
+    inputs:
+      movie_url:
+        description: 'Direct Link of the Movie'
+        required: true
+      movie_name:
+        description: 'Movie Name (e.g. Animal.webm)'
+        required: true
+
+jobs:
+  process_movie:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Tools (FFmpeg & Python)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg python3
+
+      - name: Process & Upload Movie
+        run: python3 engine.py "${{ github.event.inputs.movie_url }}" "${{ github.event.inputs.movie_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
