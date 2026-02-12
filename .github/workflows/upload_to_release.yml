@@ -1,0 +1,38 @@
+name: Upload Movie to Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      movie_url:
+        description: 'Direct Link of the Movie'
+        required: true
+      movie_name:
+        description: 'Movie Name (e.g. Jawan.mp4)'
+        required: true
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # रिलीज बनाने के लिए परमिशन ज़रूरी है
+
+    steps:
+      - name: Download Movie
+        run: |
+          # मूवी को सर्वर पर डाउनलोड करना
+          curl -L "${{ github.event.inputs.movie_url }}" -o "${{ github.event.inputs.movie_name }}"
+          echo "✅ Downloaded: ${{ github.event.inputs.movie_name }}"
+
+      - name: Create Release and Upload Movie
+        run: |
+          # एक यूनिक टैग बनाना (Timestamp के साथ)
+          TAG_NAME="v$(date +'%Y%m%d%H%M%S')"
+          
+          # GitHub CLI (gh) का इस्तेमाल करके रिलीज बनाना और फाइल अपलोड करना
+          # यह बहुत तेज़ है! 🚀
+          gh release create "$TAG_NAME" \
+            --title "Movie: ${{ github.event.inputs.movie_name }}" \
+            --notes "Uploaded by Badal's Engine 🎬" \
+            "${{ github.event.inputs.movie_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
