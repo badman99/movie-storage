@@ -1,4 +1,4 @@
-name: Validated Stealth DB Sync
+name: Stealth Movie Sync (FFmpeg + DB)
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
         default: '.dat'
 
 jobs:
-  secure-process:
+  process-and-sync:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,73 +24,80 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 1. जरूरी टूल्स सेटअप
-      - name: Install Tools
+      # 1. जरूरी औजार (Tools) सेटअप करना
+      - name: Install Tools (FFmpeg & MySQL)
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg mysql-client
-          echo "✅ Tools Installed"
+          echo "✅ Tools Ready!"
 
-      # 2. वीडियो डाउनलोड
+      # 2. वीडियो को सर्वर पर डाउनलोड करना
       - name: Download Movie
         run: |
-          curl -L "${{ github.event.inputs.movie_url }}" -o "check_video.mp4"
-          echo "✅ Download Finished"
+          curl -L "${{ github.event.inputs.movie_url }}" -o "video_raw.mp4"
+          echo "✅ Download Complete"
 
-      # 3. 🔥 CRITICAL: वीडियो करप्शन चेक (FFmpeg Logic)
+      # 3. 🔥 FFmpeg से करप्शन चेक करना (खराब वीडियो यहीं रुक जाएगा)
       - name: Verify Video Integrity
         id: verify
         run: |
-          echo "⏳ Checking for corruption..."
-          # ffprobe से चेक करेंगे कि स्ट्रीम्स रीडेबल हैं या नहीं
-          if ! ffprobe -v error -show_format -show_streams "check_video.mp4" ; then
-            echo "🚨 ERROR: Video file is corrupt or invalid!"
+          echo "⏳ Checking video health..."
+          if ! ffprobe -v error -show_format -show_streams "video_raw.mp4" ; then
+            echo "🚨 Error: Video file is corrupt!"
             exit 1
           fi
-          
-          # एक छोटा सा डिकोड टेस्ट (पहले 5 सेकंड) ताकि पक्का हो सके कि वीडियो चलता है
-          if ! ffmpeg -v error -i "check_video.mp4" -t 5 -f null - ; then
-            echo "🚨 ERROR: Video stream is unplayable!"
+          # 5 सेकंड का प्लेबैक टेस्ट
+          if ! ffmpeg -v error -i "video_raw.mp4" -t 5 -f null - ; then
+            echo "🚨 Error: Video stream is unplayable!"
             exit 1
           fi
-          echo "✅ Video is healthy!"
+          echo "✅ Video is Healthy"
 
-      # 4. क्वालिटी डिटेक्शन (अगर वेरिफिकेशन पास हुआ तभी यहाँ पहुँचेगा)
-      - name: Detect Quality
+      # 4. FFmpeg से असली क्वालिटी का पता लगाना
+      - name: Detect Quality (Resolution)
         id: detect
         run: |
-          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "check_video.mp4")
+          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "video_raw.mp4")
           if [ "$HEIGHT" -ge 2160 ]; then LABEL="4K";
           elif [ "$HEIGHT" -ge 1080 ]; then LABEL="1080p";
           elif [ "$HEIGHT" -ge 720 ]; then LABEL="720p";
           else LABEL="480p"; fi
           echo "quality_label=$LABEL" >> $GITHUB_OUTPUT
-          echo "✅ Quality: $LABEL"
+          echo "✅ Detected: $LABEL"
 
-      # 5. भेष बदलना (Masking)
-      - name: Masking
+      # 5. भेष बदलना (Masking & Renaming)
+      - name: Mask Filename
         id: mask
         run: |
-          FILENAME="m_id_${{ github.event.inputs.movie_id }}_${{ steps.detect.outputs.quality_label }}${{ github.event.inputs.mask_extension }}"
-          mv "check_video.mp4" "$FILENAME"
-          echo "final_file=$FILENAME" >> $GITHUB_OUTPUT
+          # Example: m_id_60002_1080p.dat
+          FINAL_NAME="m_id_${{ github.event.inputs.movie_id }}_${{ steps.detect.outputs.quality_label }}${{ github.event.inputs.mask_extension }}"
+          mv "video_raw.mp4" "$FINAL_NAME"
+          echo "final_filename=$FINAL_NAME" >> $GITHUB_OUTPUT
+          echo "✅ Masked Name: $FINAL_NAME"
 
-      # 6. GitHub Release बनाना
-      - name: Create Release
+      # 6. GitHub Release बनाना और डायरेक्ट लिंक जेनरेट करना
+      - name: Create Stealth Release
         id: release
         run: |
           TAG="rel_${{ github.event.inputs.movie_id }}_$(date +'%Y%m%d%H%M%S')"
-          gh release create "$TAG" --title "ID: ${{ github.event.inputs.movie_id }}" --notes "Auto Upload" "./${{ steps.mask.outputs.final_file }}"
+          # Release बनाना
+          gh release create "$TAG" \
+            --title "ID: ${{ github.event.inputs.movie_id }} Update" \
+            --notes "Auto Sync" \
+            "./${{ steps.mask.outputs.final_filename }}"
           
+          # Direct Asset URL बनाना
           REPO="${{ github.repository }}"
-          ASSET_URL="https://github.com/$REPO/releases/download/$TAG/${{ steps.mask.outputs.final_file }}"
-          echo "final_link=$ASSET_URL" >> $GITHUB_OUTPUT
+          ASSET_URL="https://github.com/$REPO/releases/download/$TAG/${{ steps.mask.outputs.final_filename }}"
+          echo "asset_url=$ASSET_URL" >> $GITHUB_OUTPUT
+          echo "✅ Asset URL: $ASSET_URL"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7. TiDB डेटाबेस अपडेट (DB Sync)
-      - name: DB Update
+      # 7. 🚀 सीधा TiDB डेटाबेस में माल भरना (Table check के साथ)
+      - name: Sync to Database (TiDB)
         run: |
+          # डेटाबेस क्रेडेंशियल्स (Hardcoded as per your request)
           DB_HOST="db.fr-pari1.bengt.wasmernet.com"
           DB_PORT="10272"
           DB_USER="c08b610b7a5780004be5223e9614"
@@ -98,10 +105,27 @@ jobs:
           DB_NAME="mcinema"
           
           M_ID="${{ github.event.inputs.movie_id }}"
-          S_URL="${{ steps.release.outputs.final_link }}"
+          S_URL="${{ steps.release.outputs.asset_url }}"
           Q_LABEL="${{ steps.detect.outputs.quality_label }}"
+
+          echo "⏳ DB Syncing..."
+
+          # SQL Execution: Table Create + Insert Data
+          mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" <<EOF
+          CREATE TABLE IF NOT EXISTS streaming_links (
+            id int AUTO_INCREMENT PRIMARY KEY,
+            movie_id int NOT NULL,
+            stream_url text NOT NULL,
+            quality_label varchar(50) NOT NULL,
+            KEY movie_id (movie_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+          INSERT INTO streaming_links (movie_id, stream_url, quality_label) 
+          VALUES ('$M_ID', '$S_URL', '$Q_LABEL');
+          EOF
           
-          # डेटाबेस में एंट्री
-          mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e "INSERT INTO streaming_links (movie_id, stream_url, quality_label) VALUES ('$M_ID', '$S_URL', '$Q_LABEL');"
-          
-          echo "🚀 बादल भाई, सब सेट है! वीडियो एकदम असली था और DB में पहुँच गया है।"
+          echo "--------------------------------------------------"
+          echo "✅ बादल भाई, मिशन कामयाब! 🤪😂"
+          echo "मूवी ID: $M_ID | क्वालिटी: $Q_LABEL"
+          echo "लिंक: $S_URL"
+          echo "--------------------------------------------------"
