@@ -1,4 +1,4 @@
-name: Badal Pro Movie Engine (VP9 + Hindi Detect)
+name: Upload Movie to Release
 
 on:
   workflow_dispatch:
@@ -7,25 +7,36 @@ on:
         description: 'Direct Link of the Movie'
         required: true
       movie_name:
-        description: 'Movie Name (e.g. Animal.webm)'
+        description: 'Movie Name (e.g. Jawan.mp4)'
         required: true
 
 jobs:
-  process_movie:
+  upload:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # रिलीज बनाने के लिए परमिशन ज़रूरी है
 
     steps:
+      # स्टेप 1: रिपॉजिटरी को चेकआउट करना (यही मिसिंग था! 😅)
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Install Tools (FFmpeg & Python)
+      # स्टेप 2: मूवी को सर्वर पर डाउनलोड करना
+      - name: Download Movie
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg python3
+          curl -L "${{ github.event.inputs.movie_url }}" -o "${{ github.event.inputs.movie_name }}"
+          echo "✅ Downloaded: ${{ github.event.inputs.movie_name }}"
 
-      - name: Process & Upload Movie
-        run: python3 engine.py "${{ github.event.inputs.movie_url }}" "${{ github.event.inputs.movie_name }}"
+      # स्टेप 3: रिलीज बनाना और फाइल अपलोड करना
+      - name: Create Release and Upload Movie
+        run: |
+          # एक यूनिक टैग बनाना (Timestamp के साथ)
+          TAG_NAME="v$(date +'%Y%m%d%H%M%S')"
+          
+          # GitHub CLI का इस्तेमाल करके रिलीज बनाना और फाइल अपलोड करना
+          gh release create "$TAG_NAME" \
+            --title "Movie: ${{ github.event.inputs.movie_name }}" \
+            --notes "Uploaded by Badal's Engine 🎬" \
+            "${{ github.event.inputs.movie_name }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
