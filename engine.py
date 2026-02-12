@@ -68,7 +68,7 @@ def main():
     
     ffmpeg_cmd = (
         f"ffmpeg -i '{raw_name}' -map 0:v:0 {audio_map} "
-        f"-c:v libvpx-vp9 -crf 30 -b:v 0 -cpu-used 4 "
+        f"-c:v libvpx-vp9 -crf 39 -b:v 0 -cpu-used 4 "
         f"-c:a libopus -b:a 128k "
         f"'{final_name}'"
     )
