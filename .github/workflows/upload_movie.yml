@@ -1,21 +1,17 @@
-name: Ultimate Stealth Engine (Verified & Optimized) 🚀🎬
+name: "Tabahi 3.0: Absolute Stealth HLS Engine 🎭🚀"
 
 on:
   workflow_dispatch:
     inputs:
       movie_url:
-        description: 'Direct Link of the Movie'
+        description: 'Direct Movie Link'
         required: true
       movie_id:
-        description: 'Target Movie ID (e.g. 60002)'
+        description: 'Target Movie ID (e.g. 42667)'
         required: true
-      mask_extension:
-        description: 'Mask Extension'
-        required: true
-        default: '.dat'
 
 jobs:
-  stealth-operation:
+  stealth-hls-operation:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,122 +20,128 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 1. जरूरी टूल्स (FFmpeg + MySQL)
+      # 1. जरूरी टूल्स सेटअप (FFmpeg + MySQL)
       - name: Install War Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg mysql-client
           echo "✅ Tools Ready"
 
-      # 2. फाइल डाउनलोड करना
+      # 2. मूवी डाउनलोड करना
       - name: Fetch Target Data
         run: |
-          echo "⏳ Downloading Source Movie..."
+          echo "⏳ Downloading Movie..."
           curl -L "${{ github.event.inputs.movie_url }}" -o "raw_source.mp4"
           echo "✅ Download Complete"
 
-      # 3. 🔥 STRICT CORRUPTION VERIFICATION (असली चेकिंग)
-      - name: Verify Data Integrity
+      # 3. 🔥 वीडियो हेल्थ चेक (Verification)
+      - name: Verify Health
         run: |
-          echo "⏳ Scanning for corruption (Level 1: Format Check)..."
-          # ffprobe चेक करेगा कि फाइल का हेडर और स्ट्रीम्स रीडेबल हैं या नहीं
+          echo "⏳ Scanning for corruption..."
           if ! ffprobe -v error -show_format -show_streams "raw_source.mp4" ; then
-            echo "🚨 ERROR: File Header Corrupt! Operation Aborted."
+            echo "🚨 Error: File Header Corrupt! Aborting."
             exit 1
           fi
+          # Decoding test (First 5 seconds)
+          ffmpeg -v error -i "raw_source.mp4" -t 5 -f null - || exit 1
+          echo "✅ Video is 100% Healthy!"
 
-          echo "⏳ Scanning for corruption (Level 2: Stream Decode Test)..."
-          # ffmpeg से पहले 5 सेकंड का डेटा 'null' डिवाइस पर प्ले करके देखेंगे 
-          # अगर स्ट्रीम में कोई एरर होगा तो ये फेल हो जाएगा
-          if ! ffmpeg -v error -i "raw_source.mp4" -t 5 -f null - ; then
-            echo "🚨 ERROR: Video Stream is Unplayable/Corrupt! Aborting Mission."
-            exit 1
-          fi
-          echo "✅ Video is 100% Healthy! Proceeding to Transcode..."
-
-      # 4. ओरिजिनल क्वालिटी डिटेक्शन
-      - name: Detect Intelligence
-        id: detect
+      # 4. 🔥 HLS TRANSCODING (360p & 240p Optimized + Original Audio)
+      - name: Transcode to HLS
         run: |
-          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "raw_source.mp4")
-          if [ "$HEIGHT" -ge 2160 ]; then LABEL="4K";
-          elif [ "$HEIGHT" -ge 1080 ]; then LABEL="1080p";
-          elif [ "$HEIGHT" -ge 720 ]; then LABEL="720p";
-          else LABEL="SD"; fi
-          echo "orig_label=$LABEL" >> $GITHUB_OUTPUT
-
-      # 5. 🔥 HIGH-OPT TRANSCODING (Video: Optimized | Audio: Original Copy)
-      - name: Transcode Secret Versions
-        run: |
-          echo "⏳ Creating 360p (Optimized Video | Original Audio)..."
-          # -preset slow (Better compression) | -c:a copy (Original Audio)
-          ffmpeg -i "raw_source.mp4" -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 28 -preset slow \
+          echo "⏳ Processing 360p (Optimized Video | Original Audio)..."
+          # -preset slow for best quality-size ratio | -c:a copy to keep audio original
+          ffmpeg -i "raw_source.mp4" \
+          -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 28 -preset slow \
           -vf "scale=-2:360" -maxrate 600k -bufsize 1.2M \
-          -c:a copy -sn -dn -map_metadata -1 "v_360p.mp4"
-          
-          echo "⏳ Creating 240p (Optimized Video | Original Audio)..."
-          ffmpeg -i "raw_source.mp4" -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 30 -preset slow \
-          -vf "scale=-2:240" -maxrate 400k -bufsize 800k \
-          -c:a copy -sn -dn -map_metadata -1 "v_240p.mp4"
-          
-          echo "⏳ Cleaning Original (Removing Junk Data)..."
-          ffmpeg -i "raw_source.mp4" -map 0:v:0 -map 0:a:0 -c copy -sn -dn -map_metadata -1 "v_orig.mp4"
-          echo "✅ All Operation Success!"
+          -c:a copy -sn -dn -map_metadata -1 \
+          -f hls -hls_time 10 -hls_playlist_type vod \
+          -hls_flags single_file -hls_segment_type fmp4 \
+          -hls_segment_filename "v_360p.m4s" v_360p.m3u8
 
-      # 6. 🎭 SECRET PROJECT NAMING
-      - name: Mask Assets
+          echo "⏳ Processing 240p (Optimized Video | Original Audio)..."
+          ffmpeg -i "raw_source.mp4" \
+          -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 30 -preset slow \
+          -vf "scale=-2:240" -maxrate 400k -bufsize 800k \
+          -c:a copy -sn -dn -map_metadata -1 \
+          -f hls -hls_time 10 -hls_playlist_type vod \
+          -hls_flags single_file -hls_segment_type fmp4 \
+          -hls_segment_filename "v_240p.m4s" v_240p.m3u8
+          
+          echo "✅ Transcoding Finished!"
+
+      # 5. 🎭 STEALTH MASKING (Renaming & internal link patching)
+      # Sab .m4s aur .m3u8 ko .dat kar rahe hain taaki koi pehchan na paye
+      - name: Apply Secret Mask
         id: mask
         run: |
           ID="${{ github.event.inputs.movie_id }}"
-          EXT="${{ github.event.inputs.mask_extension }}"
-          LBL="${{ steps.detect.outputs.orig_label }}"
           
-          NAME_ORIG="SEC_DATA_${ID}_${LBL}${EXT}"
-          NAME_360="SEC_DATA_${ID}_360p${EXT}"
-          NAME_240="SEC_DATA_${ID}_240p${EXT}"
+          # 1. Rename Data Files (.m4s) -> .dat
+          mv "v_360p.m4s" "DATA_360p_${ID}.dat"
+          mv "v_240p.m4s" "DATA_240p_${ID}.dat"
           
-          mv "v_orig.mp4" "$NAME_ORIG"
-          mv "v_360p.mp4" "$NAME_360"
-          mv "v_240p.mp4" "$NAME_240"
+          # 2. Patch Playlist files to point to new .dat data files
+          sed -i "s/v_360p.m4s/DATA_360p_${ID}.dat/g" v_360p.m3u8
+          sed -i "s/v_240p.m4s/DATA_240p_${ID}.dat/g" v_240p.m3u8
           
-          echo "f_orig=$NAME_ORIG" >> $GITHUB_OUTPUT
-          echo "f_360=$NAME_360" >> $GITHUB_OUTPUT
-          echo "f_240=$NAME_240" >> $GITHUB_OUTPUT
+          # 3. Rename Playlist Files (.m3u8) -> .dat
+          mv "v_360p.m3u8" "LIST_360p_${ID}.dat"
+          mv "v_240p.m3u8" "LIST_240p_${ID}.dat"
+          
+          # 4. Create Master Playlist (Isme sab masked links honge)
+          echo "#EXTM3U" > master.m3u8
+          echo "#EXT-X-VERSION:4" >> master.m3u8
+          echo "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360" >> master.m3u8
+          echo "LIST_360p_${ID}.dat" >> master.m3u8
+          echo "#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=426x240" >> master.m3u8
+          echo "LIST_240p_${ID}.dat" >> master.m3u8
 
-      # 7. UPLOAD TO GITHUB RELEASE
+          echo "f_360_list=LIST_360p_${ID}.dat" >> $GITHUB_OUTPUT
+          echo "f_240_list=LIST_240p_${ID}.dat" >> $GITHUB_OUTPUT
+          echo "f_360_data=DATA_360p_${ID}.dat" >> $GITHUB_OUTPUT
+          echo "f_240_data=DATA_240p_${ID}.dat" >> $GITHUB_OUTPUT
+
+      # 6. गिटहब रिलीज़ पर अपलोड करना
       - name: Deploy to Release
         id: release
         run: |
-          TAG="PROJ_REL_${{ github.event.inputs.movie_id }}_$(date +'%Y%m%d%H%M%S')"
+          TAG="REL_${{ github.event.inputs.movie_id }}_$(date +'%Y%m%d%H%M')"
           gh release create "$TAG" \
             --title "INTERNAL_DATA_ID_${{ github.event.inputs.movie_id }}" \
-            --notes "Project Encrypted | Corruption Verified | Original Audio" \
-            "./${{ steps.mask.outputs.f_orig }}" \
-            "./${{ steps.mask.outputs.f_360 }}" \
-            "./${{ steps.mask.outputs.f_240 }}"
+            "./master.m3u8" \
+            "./${{ steps.mask.outputs.f_360_list }}" \
+            "./${{ steps.mask.outputs.f_240_list }}" \
+            "./${{ steps.mask.outputs.f_360_data }}" \
+            "./${{ steps.mask.outputs.f_240_data }}"
           
-          REPO="${{ github.repository }}"
-          BASE="https://github.com/$REPO/releases/download/$TAG"
-          echo "u_orig=$BASE/${{ steps.mask.outputs.f_orig }}" >> $GITHUB_OUTPUT
-          echo "u_360=$BASE/${{ steps.mask.outputs.f_360 }}" >> $GITHUB_OUTPUT
-          echo "u_240=$BASE/${{ steps.mask.outputs.f_240 }}" >> $GITHUB_OUTPUT
+          BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
+          echo "u_master=$BASE/master.m3u8" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 8. 🚀 DB SYNC (TiDB)
-      - name: Sync with TiDB
+      # 7. 🚀 TiDB Sync (Hardcoded for Testing - Only Master Link)
+      - name: Sync TiDB
         run: |
           DB_HOST="db.fr-pari1.bengt.wasmernet.com"
-          DB_PORT="10272"
           DB_USER="c08b610b7a5780004be5223e9614"
           DB_PASS="0691c08b-610b-7bfa-8000-977f874d9bfb"
           DB_NAME="mcinema"
           MID="${{ github.event.inputs.movie_id }}"
+          MASTER="${{ steps.release.outputs.u_master }}"
           
-          mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" <<EOF
-          INSERT INTO streaming_links (movie_id, stream_url, quality_label) VALUES 
-          ('$MID', '${{ steps.release.outputs.u_orig }}', '${{ steps.detect.outputs.orig_label }}'),
-          ('$MID', '${{ steps.release.outputs.u_360 }}', '360p'),
-          ('$MID', '${{ steps.release.outputs.u_240 }}', '240p');
+          mysql -h "$DB_HOST" -P 10272 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" <<EOF
+          -- Table create if not exists (Only 3 columns needed now)
+          CREATE TABLE IF NOT EXISTS hls_master_index (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              movie_id VARCHAR(50) UNIQUE,
+              master_url TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          -- Insert or Update Master Link
+          INSERT INTO hls_master_index (movie_id, master_url) 
+          VALUES ('$MID', '$MASTER')
+          ON DUPLICATE KEY UPDATE master_url = '$MASTER';
           EOF
-          echo "✅ मिशन कामयाब! डेटाबेस अपडेट हो गया है। 🚀🤡"
+          echo "✅ मिशन कामयाब! मास्टर लिंक स्टोर हो गया है। 🚀🤡"
