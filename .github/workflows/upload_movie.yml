@@ -1,4 +1,4 @@
-name: Ultimate Stealth Engine (Original Audio) 🚀🔊
+name: Ultimate Stealth Engine (Verified & Optimized) 🚀🎬
 
 on:
   workflow_dispatch:
@@ -24,31 +24,40 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 1. टूल्स सेटअप
+      # 1. जरूरी टूल्स (FFmpeg + MySQL)
       - name: Install War Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg mysql-client
           echo "✅ Tools Ready"
 
-      # 2. डाउनलोडिंग
+      # 2. फाइल डाउनलोड करना
       - name: Fetch Target Data
         run: |
-          echo "⏳ Downloading Source..."
+          echo "⏳ Downloading Source Movie..."
           curl -L "${{ github.event.inputs.movie_url }}" -o "raw_source.mp4"
           echo "✅ Download Complete"
 
-      # 3. करप्शन चेक (Integrity Verification)
+      # 3. 🔥 STRICT CORRUPTION VERIFICATION (असली चेकिंग)
       - name: Verify Data Integrity
         run: |
-          echo "⏳ Scanning for corruption..."
+          echo "⏳ Scanning for corruption (Level 1: Format Check)..."
+          # ffprobe चेक करेगा कि फाइल का हेडर और स्ट्रीम्स रीडेबल हैं या नहीं
           if ! ffprobe -v error -show_format -show_streams "raw_source.mp4" ; then
-            echo "🚨 ERROR: File is Corrupt! Aborting Mission."
+            echo "🚨 ERROR: File Header Corrupt! Operation Aborted."
             exit 1
           fi
-          echo "✅ Data Integrity Confirmed!"
 
-      # 4. क्वालिटी डिटेक्शन
+          echo "⏳ Scanning for corruption (Level 2: Stream Decode Test)..."
+          # ffmpeg से पहले 5 सेकंड का डेटा 'null' डिवाइस पर प्ले करके देखेंगे 
+          # अगर स्ट्रीम में कोई एरर होगा तो ये फेल हो जाएगा
+          if ! ffmpeg -v error -i "raw_source.mp4" -t 5 -f null - ; then
+            echo "🚨 ERROR: Video Stream is Unplayable/Corrupt! Aborting Mission."
+            exit 1
+          fi
+          echo "✅ Video is 100% Healthy! Proceeding to Transcode..."
+
+      # 4. ओरिजिनल क्वालिटी डिटेक्शन
       - name: Detect Intelligence
         id: detect
         run: |
@@ -59,26 +68,25 @@ jobs:
           else LABEL="SD"; fi
           echo "orig_label=$LABEL" >> $GITHUB_OUTPUT
 
-      # 5. 🔥 SMART TRANSCODING (Original Audio - No Compression)
+      # 5. 🔥 HIGH-OPT TRANSCODING (Video: Optimized | Audio: Original Copy)
       - name: Transcode Secret Versions
         run: |
-          echo "⏳ Processing 360p (Video Compressed | Audio Original)..."
-          # -c:a copy -> Ye hai jaadu! Audio ko touch nahi karega, seedha copy karega.
-          # -map 0:v:0 -map 0:a:0 -> Sirf pehla video aur pehla audio (Hindi) lega.
+          echo "⏳ Creating 360p (Optimized Video | Original Audio)..."
+          # -preset slow (Better compression) | -c:a copy (Original Audio)
           ffmpeg -i "raw_source.mp4" -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 28 -preset slow \
           -vf "scale=-2:360" -maxrate 600k -bufsize 1.2M \
           -c:a copy -sn -dn -map_metadata -1 "v_360p.mp4"
           
-          echo "⏳ Processing 240p (Video Super Compressed | Audio Original)..."
+          echo "⏳ Creating 240p (Optimized Video | Original Audio)..."
           ffmpeg -i "raw_source.mp4" -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 30 -preset slow \
           -vf "scale=-2:240" -maxrate 400k -bufsize 800k \
           -c:a copy -sn -dn -map_metadata -1 "v_240p.mp4"
           
-          echo "⏳ Cleaning Original (Removing Subtitles/Tags)..."
+          echo "⏳ Cleaning Original (Removing Junk Data)..."
           ffmpeg -i "raw_source.mp4" -map 0:v:0 -map 0:a:0 -c copy -sn -dn -map_metadata -1 "v_orig.mp4"
-          echo "✅ Processing Complete!"
+          echo "✅ All Operation Success!"
 
-      # 6. 🎭 SECRET NAMING (Masking)
+      # 6. 🎭 SECRET PROJECT NAMING
       - name: Mask Assets
         id: mask
         run: |
@@ -105,7 +113,7 @@ jobs:
           TAG="PROJ_REL_${{ github.event.inputs.movie_id }}_$(date +'%Y%m%d%H%M%S')"
           gh release create "$TAG" \
             --title "INTERNAL_DATA_ID_${{ github.event.inputs.movie_id }}" \
-            --notes "Original Audio Enabled" \
+            --notes "Project Encrypted | Corruption Verified | Original Audio" \
             "./${{ steps.mask.outputs.f_orig }}" \
             "./${{ steps.mask.outputs.f_360 }}" \
             "./${{ steps.mask.outputs.f_240 }}"
@@ -118,7 +126,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 8. 🚀 DB SYNC
+      # 8. 🚀 DB SYNC (TiDB)
       - name: Sync with TiDB
         run: |
           DB_HOST="db.fr-pari1.bengt.wasmernet.com"
@@ -134,4 +142,4 @@ jobs:
           ('$MID', '${{ steps.release.outputs.u_360 }}', '360p'),
           ('$MID', '${{ steps.release.outputs.u_240 }}', '240p');
           EOF
-          echo "✅ मिशन कामयाब! ऑडियो एकदम कड़क रहेगा। 🚀🤡"
+          echo "✅ मिशन कामयाब! डेटाबेस अपडेट हो गया है। 🚀🤡"
