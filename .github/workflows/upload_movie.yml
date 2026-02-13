@@ -1,4 +1,4 @@
-name: Secure Multi-Quality DB Sync 🛡️🎬
+name: Ultimate Stealth Engine (Original Audio) 🚀🔊
 
 on:
   workflow_dispatch:
@@ -10,12 +10,12 @@ on:
         description: 'Target Movie ID (e.g. 60002)'
         required: true
       mask_extension:
-        description: 'Mask Extension (.dat, .xapk)'
+        description: 'Mask Extension'
         required: true
         default: '.dat'
 
 jobs:
-  secure-process:
+  stealth-operation:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,138 +24,114 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 1. जरूरी टूल्स
-      - name: Install FFmpeg & MySQL
+      # 1. टूल्स सेटअप
+      - name: Install War Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg mysql-client
-          echo "✅ Tools Installed"
+          echo "✅ Tools Ready"
 
-      # 2. डाउनलोड
-      - name: Download Source
+      # 2. डाउनलोडिंग
+      - name: Fetch Target Data
         run: |
-          echo "⏳ Downloading..."
-          curl -L "${{ github.event.inputs.movie_url }}" -o "source.mp4"
+          echo "⏳ Downloading Source..."
+          curl -L "${{ github.event.inputs.movie_url }}" -o "raw_source.mp4"
           echo "✅ Download Complete"
 
-      # 3. 🔥 CRITICAL CHECK: वीडियो करप्शन टेस्ट
-      - name: Verify Integrity
+      # 3. करप्शन चेक (Integrity Verification)
+      - name: Verify Data Integrity
         run: |
-          echo "⏳ Checking for corruption..."
-          # हेडर और स्ट्रीम चेक करना
-          if ! ffprobe -v error -show_format -show_streams "source.mp4" ; then
-            echo "🚨 ERROR: File Corrupt hai! (Format Error)"
+          echo "⏳ Scanning for corruption..."
+          if ! ffprobe -v error -show_format -show_streams "raw_source.mp4" ; then
+            echo "🚨 ERROR: File is Corrupt! Aborting Mission."
             exit 1
           fi
-          
-          # 5 सेकंड का प्लेबैक टेस्ट (ताकि ब्लैंक फाइल न हो)
-          if ! ffmpeg -v error -i "source.mp4" -t 5 -f null - ; then
-            echo "🚨 ERROR: Video play nahi ho raha! (Stream Error)"
-            exit 1
-          fi
-          echo "✅ Video ekdum healthy hai!"
+          echo "✅ Data Integrity Confirmed!"
 
-      # 4. ओरिजिनल क्वालिटी पता करना
-      - name: Detect Quality
+      # 4. क्वालिटी डिटेक्शन
+      - name: Detect Intelligence
         id: detect
         run: |
-          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "source.mp4")
+          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "raw_source.mp4")
           if [ "$HEIGHT" -ge 2160 ]; then LABEL="4K";
           elif [ "$HEIGHT" -ge 1080 ]; then LABEL="1080p";
           elif [ "$HEIGHT" -ge 720 ]; then LABEL="720p";
           else LABEL="SD"; fi
-          
           echo "orig_label=$LABEL" >> $GITHUB_OUTPUT
-          echo "✅ Original Quality: $LABEL"
 
-      # 5. ⚙️ TRANSCODING (360p & 240p create karna)
-      - name: Create Low Quality Versions
+      # 5. 🔥 SMART TRANSCODING (Original Audio - No Compression)
+      - name: Transcode Secret Versions
         run: |
-          echo "⏳ Making 360p..."
-          ffmpeg -i "source.mp4" -vf "scale=-2:360" -c:v libx264 -crf 28 -preset ultrafast -c:a aac -b:a 64k "video_360p.mp4"
+          echo "⏳ Processing 360p (Video Compressed | Audio Original)..."
+          # -c:a copy -> Ye hai jaadu! Audio ko touch nahi karega, seedha copy karega.
+          # -map 0:v:0 -map 0:a:0 -> Sirf pehla video aur pehla audio (Hindi) lega.
+          ffmpeg -i "raw_source.mp4" -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 28 -preset slow \
+          -vf "scale=-2:360" -maxrate 600k -bufsize 1.2M \
+          -c:a copy -sn -dn -map_metadata -1 "v_360p.mp4"
           
-          echo "⏳ Making 240p..."
-          ffmpeg -i "source.mp4" -vf "scale=-2:240" -c:v libx264 -crf 32 -preset ultrafast -c:a aac -b:a 48k "video_240p.mp4"
+          echo "⏳ Processing 240p (Video Super Compressed | Audio Original)..."
+          ffmpeg -i "raw_source.mp4" -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 30 -preset slow \
+          -vf "scale=-2:240" -maxrate 400k -bufsize 800k \
+          -c:a copy -sn -dn -map_metadata -1 "v_240p.mp4"
           
-          echo "✅ Transcoding Done!"
+          echo "⏳ Cleaning Original (Removing Subtitles/Tags)..."
+          ffmpeg -i "raw_source.mp4" -map 0:v:0 -map 0:a:0 -c copy -sn -dn -map_metadata -1 "v_orig.mp4"
+          echo "✅ Processing Complete!"
 
-      # 6. मास्किंग (Masking) और रीनेमिंग
-      - name: Mask Files
+      # 6. 🎭 SECRET NAMING (Masking)
+      - name: Mask Assets
         id: mask
         run: |
-          EXT="${{ github.event.inputs.mask_extension }}"
           ID="${{ github.event.inputs.movie_id }}"
+          EXT="${{ github.event.inputs.mask_extension }}"
           LBL="${{ steps.detect.outputs.orig_label }}"
-
-          # Original
-          mv "source.mp4" "m_${ID}_${LBL}${EXT}"
-          # 360p
-          mv "video_360p.mp4" "m_${ID}_360p${EXT}"
-          # 240p
-          mv "video_240p.mp4" "m_${ID}_240p${EXT}"
           
-          echo "f_orig=m_${ID}_${LBL}${EXT}" >> $GITHUB_OUTPUT
-          echo "f_360=m_${ID}_360p${EXT}" >> $GITHUB_OUTPUT
-          echo "f_240=m_${ID}_240p${EXT}" >> $GITHUB_OUTPUT
+          NAME_ORIG="SEC_DATA_${ID}_${LBL}${EXT}"
+          NAME_360="SEC_DATA_${ID}_360p${EXT}"
+          NAME_240="SEC_DATA_${ID}_240p${EXT}"
+          
+          mv "v_orig.mp4" "$NAME_ORIG"
+          mv "v_360p.mp4" "$NAME_360"
+          mv "v_240p.mp4" "$NAME_240"
+          
+          echo "f_orig=$NAME_ORIG" >> $GITHUB_OUTPUT
+          echo "f_360=$NAME_360" >> $GITHUB_OUTPUT
+          echo "f_240=$NAME_240" >> $GITHUB_OUTPUT
 
-      # 7. GitHub Release पर अपलोड
-      - name: Upload to Release
+      # 7. UPLOAD TO GITHUB RELEASE
+      - name: Deploy to Release
         id: release
         run: |
-          TAG="rel_${{ github.event.inputs.movie_id }}_$(date +'%Y%m%d%H%M%S')"
-          
+          TAG="PROJ_REL_${{ github.event.inputs.movie_id }}_$(date +'%Y%m%d%H%M%S')"
           gh release create "$TAG" \
-            --title "ID: ${{ github.event.inputs.movie_id }} Pack" \
-            --notes "Original + 360p + 240p" \
+            --title "INTERNAL_DATA_ID_${{ github.event.inputs.movie_id }}" \
+            --notes "Original Audio Enabled" \
             "./${{ steps.mask.outputs.f_orig }}" \
             "./${{ steps.mask.outputs.f_360 }}" \
             "./${{ steps.mask.outputs.f_240 }}"
           
           REPO="${{ github.repository }}"
           BASE="https://github.com/$REPO/releases/download/$TAG"
-          
-          echo "url_orig=$BASE/${{ steps.mask.outputs.f_orig }}" >> $GITHUB_OUTPUT
-          echo "url_360=$BASE/${{ steps.mask.outputs.f_360 }}" >> $GITHUB_OUTPUT
-          echo "url_240=$BASE/${{ steps.mask.outputs.f_240 }}" >> $GITHUB_OUTPUT
+          echo "u_orig=$BASE/${{ steps.mask.outputs.f_orig }}" >> $GITHUB_OUTPUT
+          echo "u_360=$BASE/${{ steps.mask.outputs.f_360 }}" >> $GITHUB_OUTPUT
+          echo "u_240=$BASE/${{ steps.mask.outputs.f_240 }}" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 8. 🚀 TiDB Database Update (3 Rows Insert)
-      - name: Sync DB
+      # 8. 🚀 DB SYNC
+      - name: Sync with TiDB
         run: |
           DB_HOST="db.fr-pari1.bengt.wasmernet.com"
           DB_PORT="10272"
           DB_USER="c08b610b7a5780004be5223e9614"
           DB_PASS="0691c08b-610b-7bfa-8000-977f874d9bfb"
           DB_NAME="mcinema"
-          
           MID="${{ github.event.inputs.movie_id }}"
           
-          U_ORIG="${{ steps.release.outputs.url_orig }}"
-          L_ORIG="${{ steps.detect.outputs.orig_label }}"
-          U_360="${{ steps.release.outputs.url_360 }}"
-          U_240="${{ steps.release.outputs.url_240 }}"
-
-          echo "⏳ DB Updating..."
-
           mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" <<EOF
-          CREATE TABLE IF NOT EXISTS streaming_links (
-            id int AUTO_INCREMENT PRIMARY KEY,
-            movie_id int NOT NULL,
-            stream_url text NOT NULL,
-            quality_label varchar(50) NOT NULL,
-            KEY movie_id (movie_id)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
           INSERT INTO streaming_links (movie_id, stream_url, quality_label) VALUES 
-          ('$MID', '$U_ORIG', '$L_ORIG'),
-          ('$MID', '$U_360', '360p'),
-          ('$MID', '$U_240', '240p');
+          ('$MID', '${{ steps.release.outputs.u_orig }}', '${{ steps.detect.outputs.orig_label }}'),
+          ('$MID', '${{ steps.release.outputs.u_360 }}', '360p'),
+          ('$MID', '${{ steps.release.outputs.u_240 }}', '240p');
           EOF
-          
-          echo "--------------------------------------------------"
-          echo "✅ मिशन सक्सेसफुल! 3 क्वालिटी अपलोड और DB सिंक हो गए! 🚀"
-          echo "1. $L_ORIG"
-          echo "2. 360p"
-          echo "3. 240p"
-          echo "--------------------------------------------------"
+          echo "✅ मिशन कामयाब! ऑडियो एकदम कड़क रहेगा। 🚀🤡"
