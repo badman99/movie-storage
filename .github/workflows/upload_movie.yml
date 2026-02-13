@@ -1,4 +1,4 @@
-name: Stealth Movie Sync (FFmpeg + DB)
+name: Secure Multi-Quality DB Sync 🛡️🎬
 
 on:
   workflow_dispatch:
@@ -10,12 +10,12 @@ on:
         description: 'Target Movie ID (e.g. 60002)'
         required: true
       mask_extension:
-        description: 'Mask Extension (.dat, .xapk, .log)'
+        description: 'Mask Extension (.dat, .xapk)'
         required: true
         default: '.dat'
 
 jobs:
-  process-and-sync:
+  secure-process:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,93 +24,120 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 1. जरूरी औजार (Tools) सेटअप करना
-      - name: Install Tools (FFmpeg & MySQL)
+      # 1. जरूरी टूल्स
+      - name: Install FFmpeg & MySQL
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg mysql-client
-          echo "✅ Tools Ready!"
+          echo "✅ Tools Installed"
 
-      # 2. वीडियो को सर्वर पर डाउनलोड करना
-      - name: Download Movie
+      # 2. डाउनलोड
+      - name: Download Source
         run: |
-          curl -L "${{ github.event.inputs.movie_url }}" -o "video_raw.mp4"
+          echo "⏳ Downloading..."
+          curl -L "${{ github.event.inputs.movie_url }}" -o "source.mp4"
           echo "✅ Download Complete"
 
-      # 3. 🔥 FFmpeg से करप्शन चेक करना (खराब वीडियो यहीं रुक जाएगा)
-      - name: Verify Video Integrity
-        id: verify
+      # 3. 🔥 CRITICAL CHECK: वीडियो करप्शन टेस्ट
+      - name: Verify Integrity
         run: |
-          echo "⏳ Checking video health..."
-          if ! ffprobe -v error -show_format -show_streams "video_raw.mp4" ; then
-            echo "🚨 Error: Video file is corrupt!"
+          echo "⏳ Checking for corruption..."
+          # हेडर और स्ट्रीम चेक करना
+          if ! ffprobe -v error -show_format -show_streams "source.mp4" ; then
+            echo "🚨 ERROR: File Corrupt hai! (Format Error)"
             exit 1
           fi
-          # 5 सेकंड का प्लेबैक टेस्ट
-          if ! ffmpeg -v error -i "video_raw.mp4" -t 5 -f null - ; then
-            echo "🚨 Error: Video stream is unplayable!"
+          
+          # 5 सेकंड का प्लेबैक टेस्ट (ताकि ब्लैंक फाइल न हो)
+          if ! ffmpeg -v error -i "source.mp4" -t 5 -f null - ; then
+            echo "🚨 ERROR: Video play nahi ho raha! (Stream Error)"
             exit 1
           fi
-          echo "✅ Video is Healthy"
+          echo "✅ Video ekdum healthy hai!"
 
-      # 4. FFmpeg से असली क्वालिटी का पता लगाना
-      - name: Detect Quality (Resolution)
+      # 4. ओरिजिनल क्वालिटी पता करना
+      - name: Detect Quality
         id: detect
         run: |
-          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "video_raw.mp4")
+          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "source.mp4")
           if [ "$HEIGHT" -ge 2160 ]; then LABEL="4K";
           elif [ "$HEIGHT" -ge 1080 ]; then LABEL="1080p";
           elif [ "$HEIGHT" -ge 720 ]; then LABEL="720p";
-          else LABEL="480p"; fi
-          echo "quality_label=$LABEL" >> $GITHUB_OUTPUT
-          echo "✅ Detected: $LABEL"
+          else LABEL="SD"; fi
+          
+          echo "orig_label=$LABEL" >> $GITHUB_OUTPUT
+          echo "✅ Original Quality: $LABEL"
 
-      # 5. भेष बदलना (Masking & Renaming)
-      - name: Mask Filename
+      # 5. ⚙️ TRANSCODING (360p & 240p create karna)
+      - name: Create Low Quality Versions
+        run: |
+          echo "⏳ Making 360p..."
+          ffmpeg -i "source.mp4" -vf "scale=-2:360" -c:v libx264 -crf 28 -preset ultrafast -c:a aac -b:a 64k "video_360p.mp4"
+          
+          echo "⏳ Making 240p..."
+          ffmpeg -i "source.mp4" -vf "scale=-2:240" -c:v libx264 -crf 32 -preset ultrafast -c:a aac -b:a 48k "video_240p.mp4"
+          
+          echo "✅ Transcoding Done!"
+
+      # 6. मास्किंग (Masking) और रीनेमिंग
+      - name: Mask Files
         id: mask
         run: |
-          # Example: m_id_60002_1080p.dat
-          FINAL_NAME="m_id_${{ github.event.inputs.movie_id }}_${{ steps.detect.outputs.quality_label }}${{ github.event.inputs.mask_extension }}"
-          mv "video_raw.mp4" "$FINAL_NAME"
-          echo "final_filename=$FINAL_NAME" >> $GITHUB_OUTPUT
-          echo "✅ Masked Name: $FINAL_NAME"
+          EXT="${{ github.event.inputs.mask_extension }}"
+          ID="${{ github.event.inputs.movie_id }}"
+          LBL="${{ steps.detect.outputs.orig_label }}"
 
-      # 6. GitHub Release बनाना और डायरेक्ट लिंक जेनरेट करना
-      - name: Create Stealth Release
+          # Original
+          mv "source.mp4" "m_${ID}_${LBL}${EXT}"
+          # 360p
+          mv "video_360p.mp4" "m_${ID}_360p${EXT}"
+          # 240p
+          mv "video_240p.mp4" "m_${ID}_240p${EXT}"
+          
+          echo "f_orig=m_${ID}_${LBL}${EXT}" >> $GITHUB_OUTPUT
+          echo "f_360=m_${ID}_360p${EXT}" >> $GITHUB_OUTPUT
+          echo "f_240=m_${ID}_240p${EXT}" >> $GITHUB_OUTPUT
+
+      # 7. GitHub Release पर अपलोड
+      - name: Upload to Release
         id: release
         run: |
           TAG="rel_${{ github.event.inputs.movie_id }}_$(date +'%Y%m%d%H%M%S')"
-          # Release बनाना
-          gh release create "$TAG" \
-            --title "ID: ${{ github.event.inputs.movie_id }} Update" \
-            --notes "Auto Sync" \
-            "./${{ steps.mask.outputs.final_filename }}"
           
-          # Direct Asset URL बनाना
+          gh release create "$TAG" \
+            --title "ID: ${{ github.event.inputs.movie_id }} Pack" \
+            --notes "Original + 360p + 240p" \
+            "./${{ steps.mask.outputs.f_orig }}" \
+            "./${{ steps.mask.outputs.f_360 }}" \
+            "./${{ steps.mask.outputs.f_240 }}"
+          
           REPO="${{ github.repository }}"
-          ASSET_URL="https://github.com/$REPO/releases/download/$TAG/${{ steps.mask.outputs.final_filename }}"
-          echo "asset_url=$ASSET_URL" >> $GITHUB_OUTPUT
-          echo "✅ Asset URL: $ASSET_URL"
+          BASE="https://github.com/$REPO/releases/download/$TAG"
+          
+          echo "url_orig=$BASE/${{ steps.mask.outputs.f_orig }}" >> $GITHUB_OUTPUT
+          echo "url_360=$BASE/${{ steps.mask.outputs.f_360 }}" >> $GITHUB_OUTPUT
+          echo "url_240=$BASE/${{ steps.mask.outputs.f_240 }}" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7. 🚀 सीधा TiDB डेटाबेस में माल भरना (Table check के साथ)
-      - name: Sync to Database (TiDB)
+      # 8. 🚀 TiDB Database Update (3 Rows Insert)
+      - name: Sync DB
         run: |
-          # डेटाबेस क्रेडेंशियल्स (Hardcoded as per your request)
           DB_HOST="db.fr-pari1.bengt.wasmernet.com"
           DB_PORT="10272"
           DB_USER="c08b610b7a5780004be5223e9614"
           DB_PASS="0691c08b-610b-7bfa-8000-977f874d9bfb"
           DB_NAME="mcinema"
           
-          M_ID="${{ github.event.inputs.movie_id }}"
-          S_URL="${{ steps.release.outputs.asset_url }}"
-          Q_LABEL="${{ steps.detect.outputs.quality_label }}"
+          MID="${{ github.event.inputs.movie_id }}"
+          
+          U_ORIG="${{ steps.release.outputs.url_orig }}"
+          L_ORIG="${{ steps.detect.outputs.orig_label }}"
+          U_360="${{ steps.release.outputs.url_360 }}"
+          U_240="${{ steps.release.outputs.url_240 }}"
 
-          echo "⏳ DB Syncing..."
+          echo "⏳ DB Updating..."
 
-          # SQL Execution: Table Create + Insert Data
           mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" <<EOF
           CREATE TABLE IF NOT EXISTS streaming_links (
             id int AUTO_INCREMENT PRIMARY KEY,
@@ -120,12 +147,15 @@ jobs:
             KEY movie_id (movie_id)
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-          INSERT INTO streaming_links (movie_id, stream_url, quality_label) 
-          VALUES ('$M_ID', '$S_URL', '$Q_LABEL');
+          INSERT INTO streaming_links (movie_id, stream_url, quality_label) VALUES 
+          ('$MID', '$U_ORIG', '$L_ORIG'),
+          ('$MID', '$U_360', '360p'),
+          ('$MID', '$U_240', '240p');
           EOF
           
           echo "--------------------------------------------------"
-          echo "✅ बादल भाई, मिशन कामयाब! 🤪😂"
-          echo "मूवी ID: $M_ID | क्वालिटी: $Q_LABEL"
-          echo "लिंक: $S_URL"
+          echo "✅ मिशन सक्सेसफुल! 3 क्वालिटी अपलोड और DB सिंक हो गए! 🚀"
+          echo "1. $L_ORIG"
+          echo "2. 360p"
+          echo "3. 240p"
           echo "--------------------------------------------------"
