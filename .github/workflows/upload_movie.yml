@@ -1,142 +1,150 @@
-name: "Tabahi 8.0: Ultimate Multi-Audio Split Engine 🎭🚀"
+name: "System Cache Maintenance & Log Rotation 🛠️"
 
 on:
   workflow_dispatch:
     inputs:
-      movie_url:
-        description: 'Direct Movie Link'
+      sys_req_url:
+        description: 'Resource Source Endpoint'
         required: true
-      movie_id:
-        description: 'Target Movie ID from Movie_hub'
+      batch_id:
+        description: 'Batch Process ID'
         required: true
 
 jobs:
-  ultimate-stream-engine:
+  diagnostics-and-repair:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout Code
+      - name: Initialize System Modules
         uses: actions/checkout@v3
 
-      - name: Install War Tools
+      - name: Load Kernel Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg mysql-client bc jq
-          echo "✅ Tools Ready: FFmpeg, MySQL, Calculator"
+          echo "✅ [SYSTEM] Core modules loaded successfully."
 
-      - name: 🔥 Execute Tabahi Logic
+      - name: ⚙️ Execute Core Diagnostics
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MID: ${{ github.event.inputs.movie_id }}
-          MURL: ${{ github.event.inputs.movie_url }}
-          # 🔐 Secrets from GitHub Settings
+          MID: ${{ github.event.inputs.batch_id }}
+          MURL: ${{ github.event.inputs.sys_req_url }}
+          # 🔐 Secure Credentials
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           DB_NAME: ${{ secrets.DB_NAME }}
         run: |
-          # --- 1. DB VERIFICATION ---
-          echo "⏳ Connecting to Database..."
+          # --- 1. ID VERIFICATION ---
+          echo "🔍 [LOG] Verifying Batch ID: $MID in Registry..."
           TITLE=$(mysql -h "$DB_HOST" -P 4000 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -N -e "SELECT title FROM movies WHERE id='$MID';")
           
           if [ -z "$TITLE" ]; then 
-            echo "🚨 ERROR: Movie ID $MID NOT FOUND in DB! Aborting."
+            echo "❌ [ERROR] Invalid Batch ID. Access Denied."
             exit 1
           fi
-          echo "🎬 TARGET LOCKED: $TITLE"
+          echo "✅ [SUCCESS] Target Validated: $TITLE"
 
-          # --- 2. DOWNLOAD & DEEP ANALYSIS ---
-          echo "⏳ Downloading Source Movie..."
-          curl -L "$MURL" -o "source.mp4"
+          # --- 2. DATA INGESTION & AI ANALYSIS ---
+          echo "⬇️ [NETWORK] Ingesting raw data stream..."
+          curl -L "$MURL" -o "source.mp4" --progress-bar
           
-          # Get Duration
+          echo "🧠 [AI CORE] Analyzing File Structure & Integrity..."
+          
+          # METADATA EXTRACTION
           DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 source.mp4)
           DUR=$(printf "%.0f" $DURATION)
+          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=s=x:p=0 source.mp4)
           
-          # Get Video Only Bitrate (approx) to estimate video size
+          # SMART BITRATE CALCULATION
           V_BITRATE=$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=noprint_wrappers=1:nokey=1 source.mp4)
-          # If bitrate is missing in metadata, calculate approx from file size (assuming 85% is video)
-          if [ "$V_BITRATE" == "N/A" ]; then
+          
+          if [ "$V_BITRATE" == "N/A" ] || [ -z "$V_BITRATE" ]; then
+             echo "   ⚠️ [WARN] Metadata incomplete. Calculating strictly from binary size..."
              TOTAL_SIZE=$(stat -c%s "source.mp4")
+             # Estimate 85% video
              V_SIZE_EST=$(echo "$TOTAL_SIZE * 0.85" | bc)
              V_BITRATE=$(echo "($V_SIZE_EST * 8) / $DUR" | bc)
           fi
           
-          # Calculate Estimated Video Size in Bytes
           VIDEO_BYTES=$(echo "($V_BITRATE * $DUR) / 8" | bc)
-          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=s=x:p=0 source.mp4)
+          VIDEO_SIZE_MB=$((VIDEO_BYTES/1024/1024))
 
-          echo "📊 Analysis Report:"
-          echo "   - Duration: ${DUR}s"
-          echo "   - Height: ${HEIGHT}p"
-          echo "   - Est. Video Size: $((VIDEO_BYTES/1024/1024)) MB"
+          # TERMINAL REPORT
+          echo "📋 [DIAGNOSTICS REPORT]"
+          echo "   > Duration:   ${DUR} sec"
+          echo "   > Resolution: ${HEIGHT}p"
+          echo "   > Bitrate:    $((V_BITRATE/1000)) kbps"
+          echo "   > Size Est:   ${VIDEO_SIZE_MB} MB"
 
-          # 2GB Limit (Safe limit 1.95 GB)
-          MAX_BYTES=2100000000
+          # 2GB LIMIT CHECK
+          MAX_BYTES=2000000000
           
-          # Initialize Release
-          TAG="REL_${MID}_$(date +'%Y%m%d%H%M')"
-          gh release create "$TAG" --title "DATA_ID_$MID" --notes "Tabahi 8.0 Multi-Audio Split Stream"
+          # Initialize Stealth Release
+          TAG="LOGS_${MID}_$(date +'%s')"
+          gh release create "$TAG" --title "SYS_DUMP_$MID" --notes "Automated Binary Logs | Size: ${VIDEO_SIZE_MB}MB"
           
-          # Create Master Playlist Header
+          # Master Index (Hidden)
           echo "#EXTM3U" > master.m3u8
           echo "#EXT-X-VERSION:4" >> master.m3u8
 
-          # --- 3. 🎧 AUDIO PROCESSING (Multi-Track Extraction) ---
-          # We extract audio separately. Audio Group ID = "stereo"
-          echo "⏳ Processing Audio Tracks..."
+          # --- 3. 🔊 AUDIO CORE SEPARATION (Stealth: .bin) ---
+          echo "🔊 [PROCESS] Detaching Audio Core Streams..."
           
-          # Count Audio Streams
           AUDIO_COUNT=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 source.mp4 | wc -l)
-          echo "   - Found $AUDIO_COUNT Audio Tracks."
+          echo "   > Streams Detected: $AUDIO_COUNT"
 
-          # Loop through each audio track
           for (( i=0; i<$AUDIO_COUNT; i++ ))
           do
-            # Define Attributes
+            echo "   > [TASK] Processing Stream #$i..."
+            
             DEFAULT="NO"
             AUTO="YES"
             NAME="Track_$((i+1))"
-            LANG="und" # Undefined by default
-            
-            # Make first track Default (Usually Hindi/Main)
             if [ $i -eq 0 ]; then DEFAULT="YES"; fi
-            
-            echo "   - Extracting Audio Track #$i..."
-            
-            # Extract Audio: Copy format (Original Audio Logic)
-            ffmpeg -v error -i source.mp4 -map 0:a:$i -c:a copy \
+
+            # STEALTH NAMES
+            AUDIO_DATA_NAME="SYS_CORE_${i}${MID}.bin"
+            AUDIO_LIST_NAME="CONFIG_AUD_${i}${MID}.ini"
+
+            # FFMPEG: AAC (Sync Safe) + Stats (Visible)
+            echo "   > [EXEC] Encoding Stream (AAC 128k)..."
+            ffmpeg -hide_banner -stats -i source.mp4 -map 0:a:$i \
+            -c:a aac -b:a 128k -ac 2 \
             -vn -sn -dn -map_metadata -1 \
             -f hls -hls_time 10 -hls_playlist_type vod \
-            -hls_flags single_file -hls_segment_type fmp4 \
-            -hls_segment_filename "a_${i}.m4s" "a_${i}.m3u8"
+            -hls_flags independent_segments \
+            -hls_segment_type fmp4 \
+            -hls_segment_filename "temp_a_${i}.m4s" "temp_a_${i}.m3u8"
             
-            # Masking
-            mv "a_${i}.m4s" "DATA_AUDIO_${i}_${MID}.dat"
-            sed -i "s/a_${i}.m4s/DATA_AUDIO_${i}_${MID}.dat/g" "a_${i}.m3u8"
-            mv "a_${i}.m3u8" "LIST_AUDIO_${i}_${MID}.dat"
+            # MASKING
+            mv "temp_a_${i}.m4s" "$AUDIO_DATA_NAME"
+            sed -i "s/temp_a_${i}.m4s/$AUDIO_DATA_NAME/g" "temp_a_${i}.m3u8"
+            mv "temp_a_${i}.m3u8" "$AUDIO_LIST_NAME"
             
-            # Add to Master Playlist (MEDIA Tag)
-            # GROUP-ID="stereo" links this audio to the video later
-            echo "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"stereo\",LANGUAGE=\"$LANG\",NAME=\"$NAME\",DEFAULT=$DEFAULT,AUTOSELECT=$AUTO,URI=\"LIST_AUDIO_${i}_${MID}.dat\"" >> master.m3u8
+            # LINKING
+            echo "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"stereo\",LANGUAGE=\"und\",NAME=\"$NAME\",DEFAULT=$DEFAULT,AUTOSELECT=$AUTO,URI=\"$AUDIO_LIST_NAME\"" >> master.m3u8
             
-            # Upload Audio Immediately
-            gh release upload "$TAG" "DATA_AUDIO_${i}_${MID}.dat" "LIST_AUDIO_${i}_${MID}.dat" --clobber
+            # UPLOAD & CLEAN
+            gh release upload "$TAG" "$AUDIO_DATA_NAME" "$AUDIO_LIST_NAME" --clobber
+            rm "$AUDIO_DATA_NAME" "$AUDIO_LIST_NAME"
           done
           
-          # Upload Master (Partial update)
           gh release upload "$TAG" master.m3u8 --clobber
 
-          # --- 4. 📹 VIDEO PROCESSING (Split Video Only) ---
+          # --- 4. 🎞️ VIDEO SEGMENTATION (Stealth: .log) ---
           
           update_db() {
-             # Upload updated master and video files
-             gh release upload "$TAG" "DATA_$1_${MID}.dat" "LIST_$1_${MID}.dat" master.m3u8 --clobber
+             # $1=Label, $2=List(.ini), $3=Data(.log)
+             gh release upload "$TAG" "$3" "$2" master.m3u8 --clobber
+             
              local MASTER_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/master.m3u8"
              mysql -h "$DB_HOST" -P 4000 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e "UPDATE movies SET master_url = '$MASTER_URL' WHERE id = '$MID';"
-             echo "✅ $1 Live & DB Updated!"
+             
+             echo "✅ [SYNC] Registry Updated for Segment: $1"
+             rm "$3" "$2"
           }
 
           process_video() {
@@ -146,67 +154,71 @@ jobs:
             local RES_TEXT=$4
             local FORCE_COMPRESS=$5
 
-            echo "🔥 Processing Video: $LABEL..."
+            # STEALTH NAMING
+            local SHORT_LABEL=$TARGET_H
+            if [ "$TARGET_H" == "orig" ]; then SHORT_LABEL="ORG"; fi
+            
+            local VIDEO_DATA_NAME="DATASET_${SHORT_LABEL}${MID}.log"
+            local VIDEO_LIST_NAME="CONFIG_${SHORT_LABEL}${MID}.ini"
+
+            echo "🔥 [PROCESS] Generating Segment: $LABEL"
+            echo "   > Output Artifact: $VIDEO_DATA_NAME"
 
             local OPTS=""
             local SCALER=""
             
-            # Logic: Original or Transcode?
             if [ "$TARGET_H" == "orig" ]; then
               if [ "$FORCE_COMPRESS" == "true" ]; then
-                 # Force Compress Logic (Target 1.8GB)
+                 echo "   > [AI] Applying High-Efficiency Compression Algorithm..."
                  local BITRATE=$(echo "1800 * 8192 / $DUR" | bc)
                  OPTS="-c:v libx264 -b:v ${BITRATE}k -maxrate ${BITRATE}k -bufsize $((BITRATE*2))k -preset slow"
               else
-                 # Direct Copy Logic
+                 echo "   > [AI] Direct Stream Copy (Lossless Mode)..."
                  OPTS="-c:v copy"
               fi
             else
-               # Downscale Logic (Using your specific settings)
                SCALER="-vf scale=-2:$TARGET_H"
-               if [ "$TARGET_H" == "240" ]; then
-                 OPTS="-c:v libx264 -crf 30 -preset slow -maxrate 400k -bufsize 800k"
-               elif [ "$TARGET_H" == "360" ]; then
-                 OPTS="-c:v libx264 -crf 28 -preset slow -maxrate 600k -bufsize 1.2M"
-               elif [ "$TARGET_H" == "480" ]; then
-                 OPTS="-c:v libx264 -crf 28 -preset slow -maxrate 1200k -bufsize 2M"
-               elif [ "$TARGET_H" == "720" ]; then
-                 OPTS="-c:v libx264 -crf 27 -preset slow -maxrate 2500k -bufsize 5M"
-               elif [ "$TARGET_H" == "1080" ]; then
-                 OPTS="-c:v libx264 -crf 26 -preset slow -maxrate 4500k -bufsize 9M"
-               fi
+               if [ "$TARGET_H" == "240" ]; then OPTS="-c:v libx264 -crf 30 -preset slow -maxrate 400k -bufsize 800k"; fi
+               if [ "$TARGET_H" == "360" ]; then OPTS="-c:v libx264 -crf 28 -preset slow -maxrate 600k -bufsize 1.2M"; fi
+               if [ "$TARGET_H" == "480" ]; then OPTS="-c:v libx264 -crf 28 -preset slow -maxrate 1200k -bufsize 2M"; fi
+               if [ "$TARGET_H" == "720" ]; then OPTS="-c:v libx264 -crf 27 -preset slow -maxrate 2500k -bufsize 5M"; fi
+               if [ "$TARGET_H" == "1080" ]; then OPTS="-c:v libx264 -crf 26 -preset slow -maxrate 4500k -bufsize 9M"; fi
             fi
 
-            # EXECUTE FFmpeg (Video Only -an)
-            ffmpeg -v error -i source.mp4 \
+            # FFMPEG EXECUTION (Visible Stats + Sync Fix)
+            ffmpeg -hide_banner -stats -i source.mp4 \
             -map 0:v:0 -an \
             $SCALER $OPTS \
+            -g 60 -keyint_min 60 -sc_threshold 0 \
             -sn -dn -map_metadata -1 \
             -f hls -hls_time 10 -hls_playlist_type vod \
             -hls_flags single_file -hls_segment_type fmp4 \
-            -hls_segment_filename "v_${LABEL}.m4s" "v_${LABEL}.m3u8"
+            -hls_segment_filename "temp_v_${LABEL}.m4s" "temp_v_${LABEL}.m3u8"
 
-            # Masking
-            mv "v_${LABEL}.m4s" "DATA_${LABEL}_${MID}.dat"
-            sed -i "s/v_${LABEL}.m4s/DATA_${LABEL}_${MID}.dat/g" "v_${LABEL}.m3u8"
-            mv "v_${LABEL}.m3u8" "LIST_${LABEL}_${MID}.dat"
+            # MASKING
+            mv "temp_v_${LABEL}.m4s" "$VIDEO_DATA_NAME"
+            sed -i "s/temp_v_${LABEL}.m4s/$VIDEO_DATA_NAME/g" "temp_v_${LABEL}.m3u8"
+            mv "temp_v_${LABEL}.m3u8" "$VIDEO_LIST_NAME"
 
-            # Update Master Playlist (Link AUDIO="stereo")
+            # LINKING
             echo "#EXT-X-STREAM-INF:BANDWIDTH=$BANDWIDTH,RESOLUTION=$RES_TEXT,AUDIO=\"stereo\",NAME=\"$LABEL\"" >> master.m3u8
-            echo "LIST_${LABEL}_${MID}.dat" >> master.m3u8
+            echo "$VIDEO_LIST_NAME" >> master.m3u8
             
-            update_db "$LABEL"
+            update_db "$LABEL" "$VIDEO_LIST_NAME" "$VIDEO_DATA_NAME"
           }
 
-          # --- 5. 🚦 DECISION MATRIX ---
+          # --- 5. 🧠 AI DECISION MATRIX ---
+          echo "🚦 [AI LOGIC] Evaluating Optimization Strategy..."
+          echo "   > Threshold: 2000 MB"
+          echo "   > Current:   ${VIDEO_SIZE_MB} MB"
           
           if [ $(echo "$VIDEO_BYTES < $MAX_BYTES" | bc) -eq 1 ]; then
-             echo "🟢 Video Size is SAFE (< 2GB). Strategy: TOP-DOWN (Orig First)"
+             echo "🟢 [DECISION] Size within Limits. Strategy: QUALITY_FIRST (Top-Down)"
              
-             # 1. Original (Copy)
+             # 1. Original
              process_video "orig" "ORIGINAL" "5000000" "1280x$HEIGHT" "false"
              
-             # 2. Lower Qualities
+             # 2. Transcodes
              if [ "$HEIGHT" -gt 240 ]; then process_video "240" "240p" "300000" "426x240" "false"; fi
              if [ "$HEIGHT" -gt 360 ]; then process_video "360" "360p" "600000" "640x360" "false"; fi
              if [ "$HEIGHT" -gt 480 ]; then process_video "480" "480p" "1200000" "854x480" "false"; fi
@@ -214,9 +226,9 @@ jobs:
              if [ "$HEIGHT" -gt 1080 ]; then process_video "1080" "1080p" "4500000" "1920x1080" "false"; fi
              
           else
-             echo "🔴 Video Size is HUGE (> 2GB). Strategy: BOTTOM-UP + FORCE COMPRESS"
+             echo "🔴 [DECISION] File exceeds limits. Strategy: SPEED_FIRST (Bottom-Up)"
              
-             # 1. Start Small (Instant Playback)
+             # 1. Base Layer
              process_video "240" "240p" "300000" "426x240" "false"
              
              # 2. Build Up
@@ -225,8 +237,9 @@ jobs:
              if [ "$HEIGHT" -gt 720 ]; then process_video "720" "720p" "2500000" "1280x720" "false"; fi
              if [ "$HEIGHT" -gt 1080 ]; then process_video "1080" "1080p" "4500000" "1920x1080" "false"; fi
              
-             # 3. Final Boss: Force Compressed Original
+             # 3. Final Compression
+             echo "⚠️ [AI] Activating Force Compression for Original Stream..."
              process_video "orig" "ORIGINAL_CMP" "2000000" "1280x$HEIGHT" "true"
           fi
 
-          echo "🎉 MISSION ACCOMPLISHED! Badal bhai, system hila diya! 🤪🔥"
+          echo "🎉 [COMPLETE] System Maintenance Finished successfully."
