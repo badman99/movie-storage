@@ -109,19 +109,21 @@ jobs:
             AUDIO_DATA_NAME="SYS_CORE_${i}${MID}.bin"
             AUDIO_LIST_NAME="CONFIG_AUD_${i}${MID}.ini"
 
-            # FFMPEG: AAC (Sync Safe) + Stats (Visible)
+            # FFMPEG FIX: 
+            # 1. Added _%03d to filename to satisfy 'template' requirement
+            # 2. Removed 'independent_segments' to fix AAC header error
             echo "   > [EXEC] Encoding Stream (AAC 128k)..."
             ffmpeg -hide_banner -stats -i source.mp4 -map 0:a:$i \
             -c:a aac -b:a 128k -ac 2 \
             -vn -sn -dn -map_metadata -1 \
             -f hls -hls_time 10 -hls_playlist_type vod \
-            -hls_flags independent_segments \
+            -hls_flags single_file \
             -hls_segment_type fmp4 \
-            -hls_segment_filename "temp_a_${i}.m4s" "temp_a_${i}.m3u8"
+            -hls_segment_filename "temp_a_${i}_%03d.m4s" "temp_a_${i}.m3u8"
             
-            # MASKING
-            mv "temp_a_${i}.m4s" "$AUDIO_DATA_NAME"
-            sed -i "s/temp_a_${i}.m4s/$AUDIO_DATA_NAME/g" "temp_a_${i}.m3u8"
+            # MASKING (Wildcard * handles the %03d part)
+            mv "temp_a_${i}_"*.m4s "$AUDIO_DATA_NAME"
+            sed -i "s/temp_a_${i}_.*.m4s/$AUDIO_DATA_NAME/g" "temp_a_${i}.m3u8"
             mv "temp_a_${i}.m3u8" "$AUDIO_LIST_NAME"
             
             # LINKING
@@ -185,19 +187,21 @@ jobs:
                if [ "$TARGET_H" == "1080" ]; then OPTS="-c:v libx264 -crf 26 -preset slow -maxrate 4500k -bufsize 9M"; fi
             fi
 
-            # FFMPEG EXECUTION (Visible Stats + Sync Fix)
+            # FFMPEG EXECUTION FIX:
+            # Added _%03d to filename here too to be safe
             ffmpeg -hide_banner -stats -i source.mp4 \
             -map 0:v:0 -an \
             $SCALER $OPTS \
             -g 60 -keyint_min 60 -sc_threshold 0 \
             -sn -dn -map_metadata -1 \
             -f hls -hls_time 10 -hls_playlist_type vod \
-            -hls_flags single_file -hls_segment_type fmp4 \
-            -hls_segment_filename "temp_v_${LABEL}.m4s" "temp_v_${LABEL}.m3u8"
+            -hls_flags single_file \
+            -hls_segment_type fmp4 \
+            -hls_segment_filename "temp_v_${LABEL}_%03d.m4s" "temp_v_${LABEL}.m3u8"
 
-            # MASKING
-            mv "temp_v_${LABEL}.m4s" "$VIDEO_DATA_NAME"
-            sed -i "s/temp_v_${LABEL}.m4s/$VIDEO_DATA_NAME/g" "temp_v_${LABEL}.m3u8"
+            # MASKING (Wildcard handling)
+            mv "temp_v_${LABEL}_"*.m4s "$VIDEO_DATA_NAME"
+            sed -i "s/temp_v_${LABEL}_.*.m4s/$VIDEO_DATA_NAME/g" "temp_v_${LABEL}.m3u8"
             mv "temp_v_${LABEL}.m3u8" "$VIDEO_LIST_NAME"
 
             # LINKING
