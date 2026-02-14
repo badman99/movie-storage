@@ -135,7 +135,7 @@ jobs:
              # Upload updated master and video files
              gh release upload "$TAG" "DATA_$1_${MID}.dat" "LIST_$1_${MID}.dat" master.m3u8 --clobber
              local MASTER_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/master.m3u8"
-             mysql -h "$DB_HOST" -P 10272 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e "UPDATE movies SET master_url = '$MASTER_URL' WHERE id = '$MID';"
+             mysql -h "$DB_HOST" -P 4000 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e "UPDATE movies SET master_url = '$MASTER_URL' WHERE id = '$MID';"
              echo "✅ $1 Live & DB Updated!"
           }
 
