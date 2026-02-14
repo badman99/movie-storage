@@ -39,7 +39,7 @@ jobs:
         run: |
           # --- 1. DB VERIFICATION ---
           echo "⏳ Connecting to Database..."
-          TITLE=$(mysql -h "$DB_HOST" -P 10272 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -N -e "SELECT title FROM movies WHERE id='$MID';")
+          TITLE=$(mysql -h "$DB_HOST" -P 4000 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -N -e "SELECT title FROM movies WHERE id='$MID';")
           
           if [ -z "$TITLE" ]; then 
             echo "🚨 ERROR: Movie ID $MID NOT FOUND in DB! Aborting."
