@@ -1,4 +1,4 @@
-name: "Tabahi 3.0: Absolute Stealth HLS Engine 🎭🚀"
+name: "Tabahi 8.0: Ultimate Multi-Audio Split Engine 🎭🚀"
 
 on:
   workflow_dispatch:
@@ -7,11 +7,11 @@ on:
         description: 'Direct Movie Link'
         required: true
       movie_id:
-        description: 'Target Movie ID (e.g. 42667)'
+        description: 'Target Movie ID from Movie_hub'
         required: true
 
 jobs:
-  stealth-hls-operation:
+  ultimate-stream-engine:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -20,128 +20,213 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 1. जरूरी टूल्स सेटअप (FFmpeg + MySQL)
       - name: Install War Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg mysql-client
-          echo "✅ Tools Ready"
+          sudo apt-get install -y ffmpeg mysql-client bc jq
+          echo "✅ Tools Ready: FFmpeg, MySQL, Calculator"
 
-      # 2. मूवी डाउनलोड करना
-      - name: Fetch Target Data
-        run: |
-          echo "⏳ Downloading Movie..."
-          curl -L "${{ github.event.inputs.movie_url }}" -o "raw_source.mp4"
-          echo "✅ Download Complete"
-
-      # 3. 🔥 वीडियो हेल्थ चेक (Verification)
-      - name: Verify Health
-        run: |
-          echo "⏳ Scanning for corruption..."
-          if ! ffprobe -v error -show_format -show_streams "raw_source.mp4" ; then
-            echo "🚨 Error: File Header Corrupt! Aborting."
-            exit 1
-          fi
-          # Decoding test (First 5 seconds)
-          ffmpeg -v error -i "raw_source.mp4" -t 5 -f null - || exit 1
-          echo "✅ Video is 100% Healthy!"
-
-      # 4. 🔥 HLS TRANSCODING (360p & 240p Optimized + Original Audio)
-      - name: Transcode to HLS
-        run: |
-          echo "⏳ Processing 360p (Optimized Video | Original Audio)..."
-          # -preset slow for best quality-size ratio | -c:a copy to keep audio original
-          ffmpeg -i "raw_source.mp4" \
-          -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 28 -preset slow \
-          -vf "scale=-2:360" -maxrate 600k -bufsize 1.2M \
-          -c:a copy -sn -dn -map_metadata -1 \
-          -f hls -hls_time 10 -hls_playlist_type vod \
-          -hls_flags single_file -hls_segment_type fmp4 \
-          -hls_segment_filename "v_360p.m4s" v_360p.m3u8
-
-          echo "⏳ Processing 240p (Optimized Video | Original Audio)..."
-          ffmpeg -i "raw_source.mp4" \
-          -map 0:v:0 -map 0:a:0 -c:v libx264 -crf 30 -preset slow \
-          -vf "scale=-2:240" -maxrate 400k -bufsize 800k \
-          -c:a copy -sn -dn -map_metadata -1 \
-          -f hls -hls_time 10 -hls_playlist_type vod \
-          -hls_flags single_file -hls_segment_type fmp4 \
-          -hls_segment_filename "v_240p.m4s" v_240p.m3u8
-          
-          echo "✅ Transcoding Finished!"
-
-      # 5. 🎭 STEALTH MASKING (Renaming & internal link patching)
-      # Sab .m4s aur .m3u8 ko .dat kar rahe hain taaki koi pehchan na paye
-      - name: Apply Secret Mask
-        id: mask
-        run: |
-          ID="${{ github.event.inputs.movie_id }}"
-          
-          # 1. Rename Data Files (.m4s) -> .dat
-          mv "v_360p.m4s" "DATA_360p_${ID}.dat"
-          mv "v_240p.m4s" "DATA_240p_${ID}.dat"
-          
-          # 2. Patch Playlist files to point to new .dat data files
-          sed -i "s/v_360p.m4s/DATA_360p_${ID}.dat/g" v_360p.m3u8
-          sed -i "s/v_240p.m4s/DATA_240p_${ID}.dat/g" v_240p.m3u8
-          
-          # 3. Rename Playlist Files (.m3u8) -> .dat
-          mv "v_360p.m3u8" "LIST_360p_${ID}.dat"
-          mv "v_240p.m3u8" "LIST_240p_${ID}.dat"
-          
-          # 4. Create Master Playlist (Isme sab masked links honge)
-          echo "#EXTM3U" > master.m3u8
-          echo "#EXT-X-VERSION:4" >> master.m3u8
-          echo "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360" >> master.m3u8
-          echo "LIST_360p_${ID}.dat" >> master.m3u8
-          echo "#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=426x240" >> master.m3u8
-          echo "LIST_240p_${ID}.dat" >> master.m3u8
-
-          echo "f_360_list=LIST_360p_${ID}.dat" >> $GITHUB_OUTPUT
-          echo "f_240_list=LIST_240p_${ID}.dat" >> $GITHUB_OUTPUT
-          echo "f_360_data=DATA_360p_${ID}.dat" >> $GITHUB_OUTPUT
-          echo "f_240_data=DATA_240p_${ID}.dat" >> $GITHUB_OUTPUT
-
-      # 6. गिटहब रिलीज़ पर अपलोड करना
-      - name: Deploy to Release
-        id: release
-        run: |
-          TAG="REL_${{ github.event.inputs.movie_id }}_$(date +'%Y%m%d%H%M')"
-          gh release create "$TAG" \
-            --title "INTERNAL_DATA_ID_${{ github.event.inputs.movie_id }}" \
-            "./master.m3u8" \
-            "./${{ steps.mask.outputs.f_360_list }}" \
-            "./${{ steps.mask.outputs.f_240_list }}" \
-            "./${{ steps.mask.outputs.f_360_data }}" \
-            "./${{ steps.mask.outputs.f_240_data }}"
-          
-          BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
-          echo "u_master=$BASE/master.m3u8" >> $GITHUB_OUTPUT
+      - name: 🔥 Execute Tabahi Logic
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # 7. 🚀 TiDB Sync (Hardcoded for Testing - Only Master Link)
-      - name: Sync TiDB
+          MID: ${{ github.event.inputs.movie_id }}
+          MURL: ${{ github.event.inputs.movie_url }}
+          # 🔐 Secrets from GitHub Settings
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
-          DB_HOST="db.fr-pari1.bengt.wasmernet.com"
-          DB_USER="c08b610b7a5780004be5223e9614"
-          DB_PASS="0691c08b-610b-7bfa-8000-977f874d9bfb"
-          DB_NAME="mcinema"
-          MID="${{ github.event.inputs.movie_id }}"
-          MASTER="${{ steps.release.outputs.u_master }}"
+          # --- 1. DB VERIFICATION ---
+          echo "⏳ Connecting to Database..."
+          TITLE=$(mysql -h "$DB_HOST" -P 10272 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -N -e "SELECT title FROM movies WHERE id='$MID';")
           
-          mysql -h "$DB_HOST" -P 10272 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" <<EOF
-          -- Table create if not exists (Only 3 columns needed now)
-          CREATE TABLE IF NOT EXISTS hls_master_index (
-              id INT AUTO_INCREMENT PRIMARY KEY,
-              movie_id VARCHAR(50) UNIQUE,
-              master_url TEXT,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-          );
+          if [ -z "$TITLE" ]; then 
+            echo "🚨 ERROR: Movie ID $MID NOT FOUND in DB! Aborting."
+            exit 1
+          fi
+          echo "🎬 TARGET LOCKED: $TITLE"
 
-          -- Insert or Update Master Link
-          INSERT INTO hls_master_index (movie_id, master_url) 
-          VALUES ('$MID', '$MASTER')
-          ON DUPLICATE KEY UPDATE master_url = '$MASTER';
-          EOF
-          echo "✅ मिशन कामयाब! मास्टर लिंक स्टोर हो गया है। 🚀🤡"
+          # --- 2. DOWNLOAD & DEEP ANALYSIS ---
+          echo "⏳ Downloading Source Movie..."
+          curl -L "$MURL" -o "source.mp4"
+          
+          # Get Duration
+          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 source.mp4)
+          DUR=$(printf "%.0f" $DURATION)
+          
+          # Get Video Only Bitrate (approx) to estimate video size
+          V_BITRATE=$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=noprint_wrappers=1:nokey=1 source.mp4)
+          # If bitrate is missing in metadata, calculate approx from file size (assuming 85% is video)
+          if [ "$V_BITRATE" == "N/A" ]; then
+             TOTAL_SIZE=$(stat -c%s "source.mp4")
+             V_SIZE_EST=$(echo "$TOTAL_SIZE * 0.85" | bc)
+             V_BITRATE=$(echo "($V_SIZE_EST * 8) / $DUR" | bc)
+          fi
+          
+          # Calculate Estimated Video Size in Bytes
+          VIDEO_BYTES=$(echo "($V_BITRATE * $DUR) / 8" | bc)
+          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=s=x:p=0 source.mp4)
+
+          echo "📊 Analysis Report:"
+          echo "   - Duration: ${DUR}s"
+          echo "   - Height: ${HEIGHT}p"
+          echo "   - Est. Video Size: $((VIDEO_BYTES/1024/1024)) MB"
+
+          # 2GB Limit (Safe limit 1.95 GB)
+          MAX_BYTES=2100000000
+          
+          # Initialize Release
+          TAG="REL_${MID}_$(date +'%Y%m%d%H%M')"
+          gh release create "$TAG" --title "DATA_ID_$MID" --notes "Tabahi 8.0 Multi-Audio Split Stream"
+          
+          # Create Master Playlist Header
+          echo "#EXTM3U" > master.m3u8
+          echo "#EXT-X-VERSION:4" >> master.m3u8
+
+          # --- 3. 🎧 AUDIO PROCESSING (Multi-Track Extraction) ---
+          # We extract audio separately. Audio Group ID = "stereo"
+          echo "⏳ Processing Audio Tracks..."
+          
+          # Count Audio Streams
+          AUDIO_COUNT=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 source.mp4 | wc -l)
+          echo "   - Found $AUDIO_COUNT Audio Tracks."
+
+          # Loop through each audio track
+          for (( i=0; i<$AUDIO_COUNT; i++ ))
+          do
+            # Define Attributes
+            DEFAULT="NO"
+            AUTO="YES"
+            NAME="Track_$((i+1))"
+            LANG="und" # Undefined by default
+            
+            # Make first track Default (Usually Hindi/Main)
+            if [ $i -eq 0 ]; then DEFAULT="YES"; fi
+            
+            echo "   - Extracting Audio Track #$i..."
+            
+            # Extract Audio: Copy format (Original Audio Logic)
+            ffmpeg -v error -i source.mp4 -map 0:a:$i -c:a copy \
+            -vn -sn -dn -map_metadata -1 \
+            -f hls -hls_time 10 -hls_playlist_type vod \
+            -hls_flags single_file -hls_segment_type fmp4 \
+            -hls_segment_filename "a_${i}.m4s" "a_${i}.m3u8"
+            
+            # Masking
+            mv "a_${i}.m4s" "DATA_AUDIO_${i}_${MID}.dat"
+            sed -i "s/a_${i}.m4s/DATA_AUDIO_${i}_${MID}.dat/g" "a_${i}.m3u8"
+            mv "a_${i}.m3u8" "LIST_AUDIO_${i}_${MID}.dat"
+            
+            # Add to Master Playlist (MEDIA Tag)
+            # GROUP-ID="stereo" links this audio to the video later
+            echo "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"stereo\",LANGUAGE=\"$LANG\",NAME=\"$NAME\",DEFAULT=$DEFAULT,AUTOSELECT=$AUTO,URI=\"LIST_AUDIO_${i}_${MID}.dat\"" >> master.m3u8
+            
+            # Upload Audio Immediately
+            gh release upload "$TAG" "DATA_AUDIO_${i}_${MID}.dat" "LIST_AUDIO_${i}_${MID}.dat" --clobber
+          done
+          
+          # Upload Master (Partial update)
+          gh release upload "$TAG" master.m3u8 --clobber
+
+          # --- 4. 📹 VIDEO PROCESSING (Split Video Only) ---
+          
+          update_db() {
+             # Upload updated master and video files
+             gh release upload "$TAG" "DATA_$1_${MID}.dat" "LIST_$1_${MID}.dat" master.m3u8 --clobber
+             local MASTER_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/master.m3u8"
+             mysql -h "$DB_HOST" -P 10272 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e "UPDATE movies SET master_url = '$MASTER_URL' WHERE id = '$MID';"
+             echo "✅ $1 Live & DB Updated!"
+          }
+
+          process_video() {
+            local TARGET_H=$1
+            local LABEL=$2
+            local BANDWIDTH=$3
+            local RES_TEXT=$4
+            local FORCE_COMPRESS=$5
+
+            echo "🔥 Processing Video: $LABEL..."
+
+            local OPTS=""
+            local SCALER=""
+            
+            # Logic: Original or Transcode?
+            if [ "$TARGET_H" == "orig" ]; then
+              if [ "$FORCE_COMPRESS" == "true" ]; then
+                 # Force Compress Logic (Target 1.8GB)
+                 local BITRATE=$(echo "1800 * 8192 / $DUR" | bc)
+                 OPTS="-c:v libx264 -b:v ${BITRATE}k -maxrate ${BITRATE}k -bufsize $((BITRATE*2))k -preset slow"
+              else
+                 # Direct Copy Logic
+                 OPTS="-c:v copy"
+              fi
+            else
+               # Downscale Logic (Using your specific settings)
+               SCALER="-vf scale=-2:$TARGET_H"
+               if [ "$TARGET_H" == "240" ]; then
+                 OPTS="-c:v libx264 -crf 30 -preset slow -maxrate 400k -bufsize 800k"
+               elif [ "$TARGET_H" == "360" ]; then
+                 OPTS="-c:v libx264 -crf 28 -preset slow -maxrate 600k -bufsize 1.2M"
+               elif [ "$TARGET_H" == "480" ]; then
+                 OPTS="-c:v libx264 -crf 28 -preset slow -maxrate 1200k -bufsize 2M"
+               elif [ "$TARGET_H" == "720" ]; then
+                 OPTS="-c:v libx264 -crf 27 -preset slow -maxrate 2500k -bufsize 5M"
+               elif [ "$TARGET_H" == "1080" ]; then
+                 OPTS="-c:v libx264 -crf 26 -preset slow -maxrate 4500k -bufsize 9M"
+               fi
+            fi
+
+            # EXECUTE FFmpeg (Video Only -an)
+            ffmpeg -v error -i source.mp4 \
+            -map 0:v:0 -an \
+            $SCALER $OPTS \
+            -sn -dn -map_metadata -1 \
+            -f hls -hls_time 10 -hls_playlist_type vod \
+            -hls_flags single_file -hls_segment_type fmp4 \
+            -hls_segment_filename "v_${LABEL}.m4s" "v_${LABEL}.m3u8"
+
+            # Masking
+            mv "v_${LABEL}.m4s" "DATA_${LABEL}_${MID}.dat"
+            sed -i "s/v_${LABEL}.m4s/DATA_${LABEL}_${MID}.dat/g" "v_${LABEL}.m3u8"
+            mv "v_${LABEL}.m3u8" "LIST_${LABEL}_${MID}.dat"
+
+            # Update Master Playlist (Link AUDIO="stereo")
+            echo "#EXT-X-STREAM-INF:BANDWIDTH=$BANDWIDTH,RESOLUTION=$RES_TEXT,AUDIO=\"stereo\",NAME=\"$LABEL\"" >> master.m3u8
+            echo "LIST_${LABEL}_${MID}.dat" >> master.m3u8
+            
+            update_db "$LABEL"
+          }
+
+          # --- 5. 🚦 DECISION MATRIX ---
+          
+          if [ $(echo "$VIDEO_BYTES < $MAX_BYTES" | bc) -eq 1 ]; then
+             echo "🟢 Video Size is SAFE (< 2GB). Strategy: TOP-DOWN (Orig First)"
+             
+             # 1. Original (Copy)
+             process_video "orig" "ORIGINAL" "5000000" "1280x$HEIGHT" "false"
+             
+             # 2. Lower Qualities
+             if [ "$HEIGHT" -gt 240 ]; then process_video "240" "240p" "300000" "426x240" "false"; fi
+             if [ "$HEIGHT" -gt 360 ]; then process_video "360" "360p" "600000" "640x360" "false"; fi
+             if [ "$HEIGHT" -gt 480 ]; then process_video "480" "480p" "1200000" "854x480" "false"; fi
+             if [ "$HEIGHT" -gt 720 ]; then process_video "720" "720p" "2500000" "1280x720" "false"; fi
+             if [ "$HEIGHT" -gt 1080 ]; then process_video "1080" "1080p" "4500000" "1920x1080" "false"; fi
+             
+          else
+             echo "🔴 Video Size is HUGE (> 2GB). Strategy: BOTTOM-UP + FORCE COMPRESS"
+             
+             # 1. Start Small (Instant Playback)
+             process_video "240" "240p" "300000" "426x240" "false"
+             
+             # 2. Build Up
+             if [ "$HEIGHT" -gt 360 ]; then process_video "360" "360p" "600000" "640x360" "false"; fi
+             if [ "$HEIGHT" -gt 480 ]; then process_video "480" "480p" "1200000" "854x480" "false"; fi
+             if [ "$HEIGHT" -gt 720 ]; then process_video "720" "720p" "2500000" "1280x720" "false"; fi
+             if [ "$HEIGHT" -gt 1080 ]; then process_video "1080" "1080p" "4500000" "1920x1080" "false"; fi
+             
+             # 3. Final Boss: Force Compressed Original
+             process_video "orig" "ORIGINAL_CMP" "2000000" "1280x$HEIGHT" "true"
+          fi
+
+          echo "🎉 MISSION ACCOMPLISHED! Badal bhai, system hila diya! 🤪🔥"
