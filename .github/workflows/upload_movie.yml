@@ -9,6 +9,9 @@ on:
       batch_id:
         description: 'Batch Process ID'
         required: true
+      access_token:
+        description: 'Security Clearance Key 🔑'
+        required: true
 
 jobs:
   diagnostics-and-repair:
@@ -23,14 +26,102 @@ jobs:
       - name: Load Kernel Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg mysql-client bc jq
+          sudo apt-get install -y ffmpeg mysql-client bc jq python3
           echo "✅ [SYSTEM] Core modules loaded successfully."
+
+      - name: 🛡️ Verify Security Clearance
+        env:
+          INPUT_PASS: ${{ github.event.inputs.access_token }}
+          STORED_PASS: ${{ secrets.ACTION_PASS }}
+        run: |
+          if [ "$INPUT_PASS" != "$STORED_PASS" ]; then
+            echo "❌ [ACCESS DENIED] Invalid Security Key."
+            exit 1
+          fi
+          echo "✅ [ACCESS GRANTED] secure_channel_established."
+
+      - name: 🛠️ Initialize Stealth Tools (Python Encryption Core)
+        run: |
+          # creating a master python tool for encryption & logic
+          cat <<EOF > stealth_tool.py
+          import sys, os, base64
+
+          # 🔑 THE SECRET KEY (From Input)
+          KEY = os.environ.get("CIPHER_KEY", "DEFAULT_FALLBACK_KEY")
+          KEY_BYTES = KEY.encode('utf-8')
+          KEY_LEN = len(KEY_BYTES)
+
+          def encrypt_xor(input_path, output_path):
+              try:
+                  with open(input_path, 'rb') as fin, open(output_path, 'wb') as fout:
+                      index = 0
+                      while True:
+                          chunk = fin.read(65536) # 64KB chunks
+                          if not chunk: break
+                          encrypted = bytearray(len(chunk))
+                          for i in range(len(chunk)):
+                              encrypted[i] = chunk[i] ^ KEY_BYTES[index % KEY_LEN]
+                              index += 1
+                          fout.write(encrypted)
+                  os.remove(input_path) # Clean up raw evidence
+              except Exception as e:
+                  print(f"Error encrypting {input_path}: {e}")
+
+          def lock_playlist(input_path, output_path):
+              try:
+                  with open(input_path, 'rb') as f:
+                      data = f.read()
+                  
+                  # 1. Add v2 Signature (Magic Bytes)
+                  # "B-V2" tells the worker to use v2 Logic
+                  payload = b"B-V2" + data
+                  
+                  # 2. XOR Encryption
+                  encrypted = bytearray()
+                  for i in range(len(payload)):
+                      encrypted.append(payload[i] ^ KEY_BYTES[i % KEY_LEN])
+                  
+                  # 3. Base64 Encode (to make it look like a text key/lock file)
+                  final_data = base64.b64encode(encrypted)
+                  
+                  with open(output_path, 'wb') as f:
+                      f.write(final_data)
+                  os.remove(input_path)
+              except Exception as e:
+                  print(f"Error locking playlist: {e}")
+
+          def get_lang_name(code, index):
+              mapping = {
+                  'hin': 'Hindi', 'eng': 'English', 'tam': 'Tamil', 
+                  'tel': 'Telugu', 'kor': 'Korean', 'jpn': 'Japanese'
+              }
+              # Logic: If code found, use Name. If 'und', use 'Audio {index}'
+              if code in mapping:
+                  print(mapping[code])
+              elif index == 1:
+                   # Fallback Logic: Assume Audio 1 is usually Hindi/Main
+                   print("Hindi") 
+              elif index == 2:
+                   print("English")
+              else:
+                  print(f"Audio {index}")
+
+          if __name__ == "__main__":
+              mode = sys.argv[1]
+              if mode == "encrypt":
+                  encrypt_xor(sys.argv[2], sys.argv[3])
+              elif mode == "lock":
+                  lock_playlist(sys.argv[2], sys.argv[3])
+              elif mode == "lang":
+                  get_lang_name(sys.argv[2], int(sys.argv[3]))
+          EOF
 
       - name: ⚙️ Execute Core Diagnostics
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MID: ${{ github.event.inputs.batch_id }}
           MURL: ${{ github.event.inputs.sys_req_url }}
+          CIPHER_KEY: ${{ github.event.inputs.access_token }}
           # 🔐 Secure Credentials
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_USER: ${{ secrets.DB_USER }}
@@ -90,7 +181,7 @@ jobs:
           echo "#EXTM3U" > master.m3u8
           echo "#EXT-X-VERSION:4" >> master.m3u8
 
-          # --- 3. 🔊 AUDIO CORE SEPARATION (Stealth: .bin) ---
+          # --- 3. 🔊 AUDIO CORE PROCESSING (Stealth: .dat + Encryption) ---
           echo "🔊 [PROCESS] Detaching Audio Core Streams..."
           
           AUDIO_COUNT=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 source.mp4 | wc -l)
@@ -100,18 +191,27 @@ jobs:
           do
             echo "   > [TASK] Processing Stream #$i..."
             
+            # 🕵️‍♂️ AUDIO LANGUAGE DETECTION LOGIC
+            # Get ISO code (e.g., 'hin', 'eng', 'und')
+            LANG_CODE=$(ffprobe -v error -select_streams a:$i -show_entries stream_tags=language -of csv=p=0 source.mp4)
+            
+            # Python Script decides the display Name
+            NAME=$(python3 stealth_tool.py lang "$LANG_CODE" "$((i+1))")
+            echo "   > [INFO] Track Identified as: $NAME"
+
             DEFAULT="NO"
             AUTO="YES"
-            NAME="Track_$((i+1))"
             if [ $i -eq 0 ]; then DEFAULT="YES"; fi
 
-            # STEALTH NAMES
-            AUDIO_DATA_NAME="SYS_CORE_${i}${MID}.bin"
-            AUDIO_LIST_NAME="CONFIG_AUD_${i}${MID}.ini"
+            # STEALTH NAMES (Looks like System Core Dumps)
+            # Raw output from ffmpeg (temp)
+            TEMP_SEGMENT="temp_a_${i}_%03d.dat"
+            TEMP_PLAYLIST="temp_a_${i}.m3u8"
+            
+            # Encrypted Final Names
+            ENCRYPTED_SEGMENT="sys_core_dump_${i}_${MID}.dat"
+            FINAL_PLAYLIST="config_aud_${i}_${MID}.ini"
 
-            # FFMPEG: AAC (Sync Safe) + Stats (Visible)
-            # Added -hls_flags single_file AND removed independent_segments to fix header error
-            # Added _%03d to filename for template requirement
             echo "   > [EXEC] Encoding Stream (AAC 128k)..."
             ffmpeg -hide_banner -stats -i source.mp4 -map 0:a:$i \
             -c:a aac -b:a 128k -ac 2 \
@@ -119,33 +219,33 @@ jobs:
             -f hls -hls_time 10 -hls_playlist_type vod \
             -hls_flags single_file \
             -hls_segment_type fmp4 \
-            -hls_segment_filename "temp_a_${i}_%03d.m4s" "temp_a_${i}.m3u8"
+            -hls_segment_filename "$TEMP_SEGMENT" "$TEMP_PLAYLIST"
             
-            # MASKING
-            mv "temp_a_${i}_"*.m4s "$AUDIO_DATA_NAME"
-            sed -i "s/temp_a_${i}_.*.m4s/$AUDIO_DATA_NAME/g" "temp_a_${i}.m3u8"
-            mv "temp_a_${i}.m3u8" "$AUDIO_LIST_NAME"
+            # 🔒 ENCRYPTION PHASE (XOR)
+            # Finding the generated segment (single file mode)
+            RAW_FILE=$(ls temp_a_${i}_*.dat)
+            python3 stealth_tool.py encrypt "$RAW_FILE" "$ENCRYPTED_SEGMENT"
             
-            # LINKING
-            echo "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"stereo\",LANGUAGE=\"und\",NAME=\"$NAME\",DEFAULT=$DEFAULT,AUTOSELECT=$AUTO,URI=\"$AUDIO_LIST_NAME\"" >> master.m3u8
+            # MASKING & LINKING
+            sed -i "s/temp_a_${i}_.*.dat/$ENCRYPTED_SEGMENT/g" "$TEMP_PLAYLIST"
+            mv "$TEMP_PLAYLIST" "$FINAL_PLAYLIST"
+            
+            # Add to Master
+            echo "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"stereo\",LANGUAGE=\"und\",NAME=\"$NAME\",DEFAULT=$DEFAULT,AUTOSELECT=$AUTO,URI=\"$FINAL_PLAYLIST\"" >> master.m3u8
             
             # UPLOAD & CLEAN
-            gh release upload "$TAG" "$AUDIO_DATA_NAME" "$AUDIO_LIST_NAME" --clobber
-            rm "$AUDIO_DATA_NAME" "$AUDIO_LIST_NAME"
+            gh release upload "$TAG" "$ENCRYPTED_SEGMENT" "$FINAL_PLAYLIST" --clobber
+            rm "$ENCRYPTED_SEGMENT" "$FINAL_PLAYLIST"
           done
           
-          gh release upload "$TAG" master.m3u8 --clobber
-
-          # --- 4. 🎞️ VIDEO SEGMENTATION (Stealth: .log) ---
+          # --- 4. 🎞️ VIDEO PROCESSING (Stealth: .dat + Encryption) ---
           
           update_db() {
-             # $1=Label, $2=List(.ini), $3=Data(.log)
-             gh release upload "$TAG" "$3" "$2" master.m3u8 --clobber
+             # $1=Label, $2=List(.ini), $3=Data(.dat)
+             gh release upload "$TAG" "$3" "$2" --clobber
              
-             local MASTER_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/master.m3u8"
-             mysql -h "$DB_HOST" -P 4000 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e "UPDATE movies SET master_url = '$MASTER_URL' WHERE id = '$MID';"
-             
-             echo "✅ [SYNC] Registry Updated for Segment: $1"
+             # Master URL abhi update nahi karenge, end me karenge jab registry.lock banega
+             echo "✅ [UPLOAD] Encrypted Shard Uploaded: $1"
              rm "$3" "$2"
           }
 
@@ -160,11 +260,11 @@ jobs:
             local SHORT_LABEL=$TARGET_H
             if [ "$TARGET_H" == "orig" ]; then SHORT_LABEL="ORG"; fi
             
-            local VIDEO_DATA_NAME="DATASET_${SHORT_LABEL}${MID}.log"
-            local VIDEO_LIST_NAME="CONFIG_${SHORT_LABEL}${MID}.ini"
+            # Encrypted Names (Looks like Kernel Shards)
+            local ENCRYPTED_DATA_NAME="kernel_shard_${SHORT_LABEL}${MID}.dat"
+            local VIDEO_LIST_NAME="config_sys_${SHORT_LABEL}${MID}.ini"
 
-            echo "🔥 [PROCESS] Generating Segment: $LABEL"
-            echo "   > Output Artifact: $VIDEO_DATA_NAME"
+            echo "🔥 [PROCESS] Generating Encrypted Segment: $LABEL"
 
             local OPTS=""
             local SCALER=""
@@ -187,7 +287,7 @@ jobs:
                if [ "$TARGET_H" == "1080" ]; then OPTS="-c:v libx264 -crf 26 -preset slow -maxrate 4500k -bufsize 9M"; fi
             fi
 
-            # FFMPEG EXECUTION
+            # FFMPEG EXECUTION (Temp names)
             ffmpeg -hide_banner -stats -i source.mp4 \
             -map 0:v:0 -an \
             $SCALER $OPTS \
@@ -196,54 +296,70 @@ jobs:
             -f hls -hls_time 10 -hls_playlist_type vod \
             -hls_flags single_file \
             -hls_segment_type fmp4 \
-            -hls_segment_filename "temp_v_${LABEL}_%03d.m4s" "temp_v_${LABEL}.m3u8"
+            -hls_segment_filename "temp_v_${LABEL}_%03d.dat" "temp_v_${LABEL}.m3u8"
+
+            # 🔒 ENCRYPTION PHASE (XOR)
+            local RAW_FILE=$(ls temp_v_${LABEL}_*.dat)
+            python3 stealth_tool.py encrypt "$RAW_FILE" "$ENCRYPTED_DATA_NAME"
 
             # MASKING
-            mv "temp_v_${LABEL}_"*.m4s "$VIDEO_DATA_NAME"
-            sed -i "s/temp_v_${LABEL}_.*.m4s/$VIDEO_DATA_NAME/g" "temp_v_${LABEL}.m3u8"
+            sed -i "s/temp_v_${LABEL}_.*.dat/$ENCRYPTED_DATA_NAME/g" "temp_v_${LABEL}.m3u8"
             mv "temp_v_${LABEL}.m3u8" "$VIDEO_LIST_NAME"
 
-            # 🔥 FIX: INJECT CODECS into Master Playlist
-            # This tells the player: "Hey, this stream has H.264 Video AND AAC Audio!"
+            # INJECT CODECS into Master
             echo "#EXT-X-STREAM-INF:BANDWIDTH=$BANDWIDTH,RESOLUTION=$RES_TEXT,CODECS=\"avc1.4d401f,mp4a.40.2\",AUDIO=\"stereo\",NAME=\"$LABEL\"" >> master.m3u8
             echo "$VIDEO_LIST_NAME" >> master.m3u8
             
-            update_db "$LABEL" "$VIDEO_LIST_NAME" "$VIDEO_DATA_NAME"
+            update_db "$LABEL" "$VIDEO_LIST_NAME" "$ENCRYPTED_DATA_NAME"
           }
 
-          # --- 5. 🧠 AI DECISION MATRIX ---
+          # --- 5. 🧠 AI DECISION MATRIX (UNCHANGED) ---
           echo "🚦 [AI LOGIC] Evaluating Optimization Strategy..."
           echo "   > Threshold: 2000 MB"
           echo "   > Current:   ${VIDEO_SIZE_MB} MB"
           
           if [ $(echo "$VIDEO_BYTES < $MAX_BYTES" | bc) -eq 1 ]; then
-             echo "🟢 [DECISION] Size within Limits. Strategy: QUALITY_FIRST (Top-Down)"
-             
-             # 1. Original
+             echo "🟢 [DECISION] Size within Limits. Strategy: QUALITY_FIRST"
              process_video "orig" "ORIGINAL" "5000000" "1280x$HEIGHT" "false"
-             
-             # 2. Transcodes
              if [ "$HEIGHT" -gt 240 ]; then process_video "240" "240p" "300000" "426x240" "false"; fi
              if [ "$HEIGHT" -gt 360 ]; then process_video "360" "360p" "600000" "640x360" "false"; fi
              if [ "$HEIGHT" -gt 480 ]; then process_video "480" "480p" "1200000" "854x480" "false"; fi
              if [ "$HEIGHT" -gt 720 ]; then process_video "720" "720p" "2500000" "1280x720" "false"; fi
              if [ "$HEIGHT" -gt 1080 ]; then process_video "1080" "1080p" "4500000" "1920x1080" "false"; fi
-             
           else
-             echo "🔴 [DECISION] File exceeds limits. Strategy: SPEED_FIRST (Bottom-Up)"
-             
-             # 1. Base Layer
+             echo "🔴 [DECISION] File exceeds limits. Strategy: SPEED_FIRST"
              process_video "240" "240p" "300000" "426x240" "false"
-             
-             # 2. Build Up
              if [ "$HEIGHT" -gt 360 ]; then process_video "360" "360p" "600000" "640x360" "false"; fi
              if [ "$HEIGHT" -gt 480 ]; then process_video "480" "480p" "1200000" "854x480" "false"; fi
              if [ "$HEIGHT" -gt 720 ]; then process_video "720" "720p" "2500000" "1280x720" "false"; fi
              if [ "$HEIGHT" -gt 1080 ]; then process_video "1080" "1080p" "4500000" "1920x1080" "false"; fi
-             
-             # 3. Final Compression
-             echo "⚠️ [AI] Activating Force Compression for Original Stream..."
              process_video "orig" "ORIGINAL_CMP" "2000000" "1280x$HEIGHT" "true"
           fi
 
+          # --- 6. 🔐 LOCKING THE REGISTRY (Master Playlist Encryption) ---
+          echo "🔒 [SECURITY] Locking System Registry..."
+          
+          # Convert master.m3u8 -> registry.lock (B-V2 Header + XOR + Base64)
+          python3 stealth_tool.py lock "master.m3u8" "registry.lock"
+          
+          gh release upload "$TAG" "registry.lock" --clobber
+
+          # DB UPDATE (Pointing to the Locked Registry)
+          LOCK_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/registry.lock"
+          mysql -h "$DB_HOST" -P 4000 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e "UPDATE movies SET master_url = '$LOCK_URL' WHERE id = '$MID';"
+
           echo "🎉 [COMPLETE] System Maintenance Finished successfully."
+
+      - name: 🏃 External Task Runner (Run.py)
+        if: always() # Run even if previous steps had minor issues (but after critical stuff)
+        env:
+           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           CIPHER_KEY: ${{ github.event.inputs.access_token }}
+           MID: ${{ github.event.inputs.batch_id }}
+        run: |
+          if [ -f "run.py" ]; then
+             echo "🚀 [EXTENSION] Executing External Protocol (run.py)..."
+             python3 run.py
+          else
+             echo "⚠️ [INFO] No external protocol (run.py) found. Skipping."
+          fi
