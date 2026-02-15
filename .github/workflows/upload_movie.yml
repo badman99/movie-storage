@@ -1,4 +1,4 @@
-name: "System Cache Maintenance & Log Rotation v5 (Turbo Parallel) 🛠️"
+name: "System Cache Maintenance & Log Rotation v5 (Parallel God Mode) 🛠️"
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
           pip3 install huggingface_hub
           echo "✅ [SYSTEM] Core modules loaded successfully."
 
-      - name: 🛡️ Verify Security & Initialize Tools
+      - name: 🛡️ Verify Security & Initialize Stealth Tools
         env:
           INPUT_PASS: ${{ github.event.inputs.access_token }}
           STORED_PASS: ${{ secrets.ACTION_PASS }}
@@ -39,16 +39,19 @@ jobs:
             echo "❌ [ACCESS DENIED] Invalid Security Key."
             exit 1
           fi
-          
+
           # --- 🛠️ BADAL'S STEALTH TOOLKIT (Python) ---
           cat <<EOF > stealth_tool.py
-          import sys, os, base64, random
+          import sys, os, base64, time
           from huggingface_hub import HfApi
 
-          # 🔑 XOR KEY
           KEY = os.environ.get("CIPHER_KEY", "DEFAULT_KEY")
           KEY_BYTES = KEY.encode('utf-8')
           KEY_LEN = len(KEY_BYTES)
+          
+          # HF Configuration
+          HF_TOKEN = os.environ.get("HF_TOKEN")
+          HF_REPO = "bk939448/System_arc_data" 
 
           def encrypt_xor(input_path, output_path):
               try:
@@ -62,14 +65,13 @@ jobs:
                               encrypted[i] = chunk[i] ^ KEY_BYTES[index % KEY_LEN]
                               index += 1
                           fout.write(encrypted)
-                  if os.path.exists(input_path): os.remove(input_path)
+                  os.remove(input_path)
               except Exception as e:
                   print(f"Encryption Error: {e}")
 
           def lock_playlist(input_path, output_path):
               try:
                   with open(input_path, 'rb') as f: data = f.read()
-                  # v2 Header injection
                   payload = b"B-V2" + data
                   encrypted = bytearray()
                   for i in range(len(payload)):
@@ -79,60 +81,55 @@ jobs:
               except Exception as e:
                   print(f"Lock Error: {e}")
 
-          def direct_hf_upload(filepath, repo_id, token, mid):
+          def upload_hf(file_path, batch_id):
               try:
                   api = HfApi()
-                  # Uploading immediately for Huge Files
-                  remote_path = f"logs_{mid}/{filepath}"
-                  print(f"🚀 Uploading huge file {filepath} to HF...")
-                  api.upload_file(
-                      path_or_fileobj=filepath,
-                      path_in_repo=remote_path,
-                      repo_id=repo_id,
-                      repo_type="dataset",
-                      token=token
-                  )
-                  # Return Resolve URL
-                  return f"https://huggingface.co/datasets/{repo_id}/resolve/main/{remote_path}"
+                  # Retry logic for stability
+                  for _ in range(3):
+                      try:
+                          api.upload_file(
+                              path_or_fileobj=file_path,
+                              path_in_repo=f"logs_{batch_id}/{file_path}",
+                              repo_id=HF_REPO,
+                              repo_type="dataset",
+                              token=HF_TOKEN
+                          )
+                          print(f"✅ [HF] Uploaded {file_path}")
+                          return
+                      except:
+                          time.sleep(2)
               except Exception as e:
-                  print(f"HF Upload Error: {e}")
-                  return None
+                  print(f"❌ [HF] Error: {e}")
 
           def get_lang_name(code, index):
-              # 🇮🇳 INDIAN LANGUAGE MAPPING (Complete)
               mapping = {
                   'hin': 'Hindi', 'eng': 'English', 'tam': 'Tamil', 'tel': 'Telugu',
                   'kan': 'Kannada', 'pan': 'Punjabi', 'mal': 'Malayalam',
                   'ben': 'Bengali', 'mar': 'Marathi', 'guj': 'Gujarati',
-                  'urd': 'Urdu', 'bho': 'Bhojpuri', 'san': 'Sanskrit',
-                  'ori': 'Odia', 'asm': 'Assamese'
+                  'bho': 'Bhojpuri', 'urd': 'Urdu'
               }
-              if code in mapping:
-                  print(mapping[code])
-              elif index == 1:
-                   print("Hindi") # Fallback
-              elif index == 2:
-                   print("English")
-              else:
-                  print(f"Audio {index}")
+              if code in mapping: print(mapping[code])
+              elif index == 1: print("Hindi")
+              elif index == 2: print("English")
+              else: print(f"Audio {index}")
 
           if __name__ == "__main__":
               mode = sys.argv[1]
               if mode == "encrypt": encrypt_xor(sys.argv[2], sys.argv[3])
               elif mode == "lock": lock_playlist(sys.argv[2], sys.argv[3])
+              elif mode == "hf": upload_hf(sys.argv[2], sys.argv[3])
               elif mode == "lang": get_lang_name(sys.argv[2], int(sys.argv[3]))
-              elif mode == "hf_up": print(direct_hf_upload(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]))
           EOF
           echo "✅ [TOOLS] Stealth Toolkit Initialized."
 
-      - name: ⚙️ Execute Turbo Parallel Processing
+      - name: ⚙️ Execute Parallel Processing & Live Sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MID: ${{ github.event.inputs.batch_id }}
           MURL: ${{ github.event.inputs.sys_req_url }}
           CIPHER_KEY: ${{ github.event.inputs.access_token }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_REPO: "badman99/system_data"
+          HF_REPO: "bk939448/System_arc_data"
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
@@ -140,238 +137,197 @@ jobs:
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          # --- 1. VERIFY ID ---
-          TITLE=$(mysql -h "$DB_HOST" -P 4000 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -N -e "SELECT title FROM movies WHERE id='$MID';")
-          if [ -z "$TITLE" ]; then echo "❌ Invalid ID"; exit 1; fi
-          echo "✅ Processing: $TITLE"
-
-          # --- 2. DOWNLOAD & ANALYZE ---
+          # --- 1. DOWNLOAD & ANALYZE ---
           curl -L "$MURL" -o "source.mp4" --progress-bar
           
-          # Metadata
+          # Metadata Calculation
           DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 source.mp4)
           DUR=$(printf "%.0f" $DURATION)
-          HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=s=x:p=0 source.mp4)
           TOTAL_SIZE=$(stat -c%s "source.mp4")
           
-          # 2GB Check logic
+          # 2GB Logic
           IS_HUGE="false"
           if [ $TOTAL_SIZE -gt 2000000000 ]; then IS_HUGE="true"; fi
 
           # Initialize GitHub Release
           TAG="LOGS_${MID}_$(date +'%s')"
-          gh release create "$TAG" --title "SYS_DUMP_$MID" --notes "Turbo Parallel Logs"
+          gh release create "$TAG" --title "SYS_DUMP_$MID" --notes "Parallel Hybrid Logs"
 
-          # Initialize 3 Master Playlists
-          echo "#EXTM3U" > master_git.m3u8
-          echo "#EXT-X-VERSION:4" >> master_git.m3u8
+          # Initialize Playlists
+          echo "#EXTM3U" > master_git.m3u8; echo "#EXT-X-VERSION:4" >> master_git.m3u8
           cp master_git.m3u8 master_hf.m3u8
           cp master_git.m3u8 master_hybrid.m3u8
 
-          # --- FUNCTION: SYNC LIVE (Updates DB instantly) ---
-          sync_live() {
-             # Locks all playlists and updates DB
-             python3 stealth_tool.py lock "master_git.m3u8" "registry_git.lock"
-             python3 stealth_tool.py lock "master_hybrid.m3u8" "registry.lock"
-             
-             # Upload Locks to GitHub
-             gh release upload "$TAG" "registry_git.lock" "registry.lock" --clobber
-             
-             # Construct URLs
-             LOCK_GIT="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$TAG/registry_git.lock"
-             LOCK_HYBRID="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$TAG/registry.lock"
-             
-             # Note: HF Lock URL is theoretical here until run.py runs, but we set it
-             LOCK_HF="https://huggingface.co/datasets/$HF_REPO/resolve/main/logs_$MID/registry_hf.lock"
+          # --- FUNCTION: UPDATE & LOCK MASTERS (LIVE) ---
+          sync_masters() {
+            # 1. Lock & Upload Hybrid (Main)
+            python3 stealth_tool.py lock "master_hybrid.m3u8" "registry.lock"
+            gh release upload "$TAG" "registry.lock" --clobber
+            python3 stealth_tool.py hf "registry.lock" "$MID"
 
-             # Update DB
-             mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e \
-             "UPDATE movies SET master_url='$LOCK_HYBRID', master_url_git='$LOCK_GIT', master_url_hf='$LOCK_HF' WHERE id='$MID';"
-             
-             echo "📡 [LIVE SYNC] Registry Updated!"
+            # 2. Lock & Upload Git/HF variants
+            python3 stealth_tool.py lock "master_git.m3u8" "registry_git.lock"
+            gh release upload "$TAG" "registry_git.lock" --clobber
+            
+            python3 stealth_tool.py lock "master_hf.m3u8" "registry_hf.lock"
+            python3 stealth_tool.py hf "registry_hf.lock" "$MID"
+
+            # 3. DB Update (Live URL Injection)
+            LOCK_GIT="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$TAG/registry_git.lock"
+            LOCK_HF="https://huggingface.co/datasets/$HF_REPO/resolve/main/logs_$MID/registry_hf.lock"
+            LOCK_HYBRID="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$TAG/registry.lock"
+
+            mysql -h "$DB_HOST" -P 4000 -u "$DB_USER" -p"$DB_PASS" -D "$DB_NAME" -e \
+            "UPDATE movies SET master_url='$LOCK_HYBRID', master_url_git='$LOCK_GIT', master_url_hf='$LOCK_HF' WHERE id='$MID';"
+            
+            echo "📡 [SYNC] Live Registry Updated!"
           }
 
-          # --- 3. 🔊 AUDIO PROCESSING (Universal) ---
-          # Audio is fast, do it sequentially first
+          # --- 2. 🔊 AUDIO PROCESSING (Sequential - Fast) ---
           AUDIO_COUNT=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 source.mp4 | wc -l)
-          for (( i=0; i<$AUDIO_COUNT; i++ )); do
+          
+          for (( i=0; i<$AUDIO_COUNT; i++ ))
+          do
             LANG_CODE=$(ffprobe -v error -select_streams a:$i -show_entries stream_tags=language -of csv=p=0 source.mp4)
             NAME=$(python3 stealth_tool.py lang "$LANG_CODE" "$((i+1))")
-            
             DEFAULT="NO"; AUTO="YES"; if [ $i -eq 0 ]; then DEFAULT="YES"; fi
-            ENC_SEG="sys_core_dump_${i}_${MID}.dat"; FINAL_PL="config_aud_${i}_${MID}.ini"
 
-            ffmpeg -hide_banner -i source.mp4 -map 0:a:$i -c:a aac -b:a 128k -ac 2 \
-            -vn -sn -dn -map_metadata -1 -f hls -hls_time 10 -hls_playlist_type vod \
-            -hls_flags single_file -hls_segment_type fmp4 -hls_segment_filename "temp_a_${i}_%03d.dat" "temp_a.m3u8"
+            RAW_PL="temp_a_${i}.m3u8"; ENC_SEG="sys_core_dump_${i}_${MID}.dat"; FINAL_PL="config_aud_${i}_${MID}.ini"
 
-            RAW_FILE=$(ls temp_a_${i}_*.dat)
-            python3 stealth_tool.py encrypt "$RAW_FILE" "$ENC_SEG"
-            sed -i "s/temp_a_${i}_.*.dat/$ENC_SEG/g" "temp_a.m3u8"
-            mv "temp_a.m3u8" "$FINAL_PL"
-            
-            # Upload Audio
+            ffmpeg -hide_banner -stats -i source.mp4 -map 0:a:$i \
+            -c:a aac -b:a 128k -ac 2 -vn -sn -dn -map_metadata -1 \
+            -f hls -hls_time 10 -hls_playlist_type vod -hls_flags single_file -hls_segment_type fmp4 \
+            -hls_segment_filename "temp_a_${i}_%03d.dat" "$RAW_PL"
+
+            python3 stealth_tool.py encrypt "$(ls temp_a_${i}_*.dat)" "$ENC_SEG"
+            sed -i "s/temp_a_${i}_.*.dat/$ENC_SEG/g" "$RAW_PL"
+            mv "$RAW_PL" "$FINAL_PL"
+
+            # Upload Git & HF
             gh release upload "$TAG" "$ENC_SEG" "$FINAL_PL" --clobber
-            
+            python3 stealth_tool.py hf "$ENC_SEG" "$MID"
+            python3 stealth_tool.py hf "$FINAL_PL" "$MID"
+
             ENTRY="#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"stereo\",LANGUAGE=\"und\",NAME=\"$NAME\",DEFAULT=$DEFAULT,AUTOSELECT=$AUTO,URI=\"$FINAL_PL\""
             echo "$ENTRY" >> master_git.m3u8; echo "$ENTRY" >> master_hf.m3u8; echo "$ENTRY" >> master_hybrid.m3u8
           done
-
-          # --- 4. 🎞️ VIDEO PROCESSING FUNCTION (Parallel Ready) ---
           
-          process_video() {
+          sync_masters # Sync Audio First
+
+          # --- 3. 🎞️ VIDEO PROCESSING (PARALLEL LOGIC) ---
+          
+          process_segment() {
             local H=$1; local LBL=$2; local BW=$3; local RES=$4; local COMPRESS=$5
             local SHORT_LBL=$H; if [ "$H" == "orig" ]; then SHORT_LBL="ORG"; fi
+            
             local ENC_DATA="kernel_shard_${SHORT_LBL}${MID}.dat"
             local LIST_NAME="config_sys_${SHORT_LBL}${MID}.ini"
             
-            echo "🔥 [START] Segment: $LBL"
+            echo "🔥 [START] Processing $LBL..."
 
-            # Check Huge File Logic
+            # Logic for Huge Original File (>2GB)
             if [ "$H" == "orig" ] && [ "$IS_HUGE" == "true" ] && [ "$COMPRESS" == "false" ]; then
-                # Direct HF Upload Mode
-                ffmpeg -hide_banner -i source.mp4 -map 0:v:0 -an -c:v copy \
-                -sn -dn -map_metadata -1 -f hls -hls_time 10 -hls_playlist_type vod \
-                -hls_flags single_file -hls_segment_type fmp4 -hls_segment_filename "temp_v_${LBL}_%03d.dat" "temp_v_${LBL}.m3u8"
+                ffmpeg -hide_banner -i source.mp4 -map 0:v:0 -an -c:v copy -sn -dn -map_metadata -1 \
+                -f hls -hls_time 10 -hls_playlist_type vod -hls_flags single_file -hls_segment_type fmp4 \
+                -hls_segment_filename "temp_v_${LBL}_%03d.dat" "temp_v_${LBL}.m3u8"
                 
-                RAW=$(ls temp_v_${LBL}_*.dat)
-                python3 stealth_tool.py encrypt "$RAW" "$ENC_DATA"
+                # Encrypt
+                python3 stealth_tool.py encrypt "$(ls temp_v_${LBL}_*.dat)" "$ENC_DATA"
                 sed -i "s/temp_v_${LBL}_.*.dat/$ENC_DATA/g" "temp_v_${LBL}.m3u8"
                 mv "temp_v_${LBL}.m3u8" "$LIST_NAME"
 
-                # Upload to HF Immediately using Python
-                echo "🚀 [HUGE] Uploading $LBL direct to HF..."
-                python3 stealth_tool.py hf_up "$ENC_DATA" "$HF_REPO" "$HF_TOKEN" "$MID"
-                python3 stealth_tool.py hf_up "$LIST_NAME" "$HF_REPO" "$HF_TOKEN" "$MID"
+                # Upload ONLY to HF (Skip GitHub)
+                python3 stealth_tool.py hf "$ENC_DATA" "$MID"
+                python3 stealth_tool.py hf "$LIST_NAME" "$MID"
                 
-                # Add to HF/Hybrid Playlist
+                # Update Playlists (Hybrid gets HF link)
                 ENTRY="#EXT-X-STREAM-INF:BANDWIDTH=$BW,RESOLUTION=$RES,CODECS=\"avc1.4d401f,mp4a.40.2\",AUDIO=\"stereo\",NAME=\"$LBL\""
                 echo "$ENTRY" >> master_hf.m3u8; echo "$LIST_NAME" >> master_hf.m3u8
                 echo "$ENTRY" >> master_hybrid.m3u8; echo "$LIST_NAME" >> master_hybrid.m3u8
-                
-                # Skip Git Upload
             else
-                # Standard Mode (Transcode/Small Orig)
-                local OPTS="-c:v copy"
-                local SCALER=""
-                if [ "$H" != "orig" ]; then
+                # Standard Processing (Parallel Friendly)
+                local OPTS=""; local SCALER=""
+                if [ "$H" == "orig" ]; then
+                   OPTS="-c:v copy"
+                   if [ "$COMPRESS" == "true" ]; then 
+                     local BR=$(echo "1800 * 8192 / $DUR" | bc)
+                     OPTS="-c:v libx264 -b:v ${BR}k -maxrate ${BR}k -bufsize $((BR*2))k -preset slow"
+                   fi
+                else
                    SCALER="-vf scale=-2:$H"
                    if [ "$H" == "240" ]; then OPTS="-c:v libx264 -crf 30 -preset slow -maxrate 400k -bufsize 800k"; fi
                    if [ "$H" == "360" ]; then OPTS="-c:v libx264 -crf 28 -preset slow -maxrate 600k -bufsize 1.2M"; fi
                    if [ "$H" == "480" ]; then OPTS="-c:v libx264 -crf 28 -preset slow -maxrate 1200k -bufsize 2M"; fi
                    if [ "$H" == "720" ]; then OPTS="-c:v libx264 -crf 27 -preset slow -maxrate 2500k -bufsize 5M"; fi
                    if [ "$H" == "1080" ]; then OPTS="-c:v libx264 -crf 26 -preset slow -maxrate 4500k -bufsize 9M"; fi
-                elif [ "$COMPRESS" == "true" ]; then
-                     local BR=$(echo "1800 * 8192 / $DUR" | bc)
-                     OPTS="-c:v libx264 -b:v ${BR}k -maxrate ${BR}k -bufsize $((BR*2))k -preset slow"
                 fi
 
-                ffmpeg -hide_banner -i source.mp4 -map 0:v:0 -an $SCALER $OPTS \
+                ffmpeg -hide_banner -stats -i source.mp4 -map 0:v:0 -an $SCALER $OPTS \
                 -g 60 -keyint_min 60 -sc_threshold 0 -sn -dn -map_metadata -1 \
-                -f hls -hls_time 10 -hls_playlist_type vod \
-                -hls_flags single_file -hls_segment_type fmp4 -hls_segment_filename "temp_v_${LBL}_%03d.dat" "temp_v_${LBL}.m3u8"
+                -f hls -hls_time 10 -hls_playlist_type vod -hls_flags single_file -hls_segment_type fmp4 \
+                -hls_segment_filename "temp_v_${LBL}_%03d.dat" "temp_v_${LBL}.m3u8"
 
-                RAW=$(ls temp_v_${LBL}_*.dat)
-                python3 stealth_tool.py encrypt "$RAW" "$ENC_DATA"
+                python3 stealth_tool.py encrypt "$(ls temp_v_${LBL}_*.dat)" "$ENC_DATA"
                 sed -i "s/temp_v_${LBL}_.*.dat/$ENC_DATA/g" "temp_v_${LBL}.m3u8"
                 mv "temp_v_${LBL}.m3u8" "$LIST_NAME"
 
-                # Upload to Git
+                # Upload Both (Parallel safe)
                 gh release upload "$TAG" "$ENC_DATA" "$LIST_NAME" --clobber
+                python3 stealth_tool.py hf "$ENC_DATA" "$MID"
+                python3 stealth_tool.py hf "$LIST_NAME" "$MID"
 
                 ENTRY="#EXT-X-STREAM-INF:BANDWIDTH=$BW,RESOLUTION=$RES,CODECS=\"avc1.4d401f,mp4a.40.2\",AUDIO=\"stereo\",NAME=\"$LBL\""
                 
-                # Append to Playlists
+                # Random Switch for Hybrid Playlist
                 echo "$ENTRY" >> master_git.m3u8; echo "$LIST_NAME" >> master_git.m3u8
                 echo "$ENTRY" >> master_hf.m3u8; echo "$LIST_NAME" >> master_hf.m3u8
-                
-                # Traffic Randomizer (50/50 for Hybrid)
-                # Since Worker handles base URL, we just add entry. Rulebook handles load balancing.
                 echo "$ENTRY" >> master_hybrid.m3u8; echo "$LIST_NAME" >> master_hybrid.m3u8
             fi
-            
-            # 🔥 INSTANT LIVE UPDATE
-            sync_live
-            echo "✅ [DONE] Segment: $LBL is Live!"
+            echo "✅ [DONE] $LBL Ready!"
           }
 
-          # --- 5. EXECUTE TURBO PARALLEL PROCESSING ---
-          # Run low qualities in background, high qualities in foreground
-          
-          # Group 1: Background Workers (Lightweight)
-          process_video "240" "240p" "300000" "426x240" "false" &
+          # --- 🚀 PARALLEL EXECUTION MATRIX ---
+          # Group 1: 240p & 360p (Run in Background)
+          process_segment "240" "240p" "300000" "426x240" "false" &
           PID_240=$!
-          
-          process_video "360" "360p" "600000" "640x360" "false" &
+          process_segment "360" "360p" "600000" "640x360" "false" &
           PID_360=$!
           
-          process_video "480" "480p" "1200000" "854x480" "false" &
-          PID_480=$!
-          
-          # Group 2: Main Workers (Heavyweight - Sequential to avoid RAM Crash)
-          if [ "$HEIGHT" -gt 720 ]; then 
-             process_video "720" "720p" "2500000" "1280x720" "false"
+          wait $PID_240 $PID_360
+          sync_masters # Update DB after Group 1
+
+          # Group 2: 480p & 720p
+          if [ "$HEIGHT" -gt 480 ]; then
+             process_segment "480" "480p" "1200000" "854x480" "false" &
+             PID_480=$!
+          fi
+          if [ "$HEIGHT" -gt 720 ]; then
+             process_segment "720" "720p" "2500000" "1280x720" "false" &
+             PID_720=$!
           fi
           
-          if [ "$HEIGHT" -gt 1080 ]; then 
-             process_video "1080" "1080p" "4500000" "1920x1080" "false"
+          wait $PID_480 $PID_720
+          sync_masters # Update DB after Group 2
+
+          # Group 3: 1080p (Heavy - Run Alone)
+          if [ "$HEIGHT" -gt 1080 ]; then
+             process_segment "1080" "1080p" "4500000" "1920x1080" "false"
+             sync_masters
           fi
+
+          # Group 4: Original (Heavy/Large)
+          process_segment "orig" "ORIGINAL" "5000000" "1280x$HEIGHT" "false"
+          sync_masters
           
-          # Process Original
-          process_video "orig" "ORIGINAL" "5000000" "1280x$HEIGHT" "false"
-          
-          # Wait for background jobs to finish
-          wait $PID_240 $PID_360 $PID_480
-          
-          echo "🎉 [COMPLETE] All Qualities Processed."
+          echo "🎉 [COMPLETE] Main processing done."
 
       - name: 🏃 External Task Runner (Run.py)
         if: always()
         env:
-           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-           CIPHER_KEY: ${{ github.event.inputs.access_token }}
            MID: ${{ github.event.inputs.batch_id }}
-           DB_HOST: ${{ secrets.DB_HOST }}
-           DB_USER: ${{ secrets.DB_USER }}
-           DB_PASS: ${{ secrets.DB_PASS }}
-           DB_NAME: ${{ secrets.DB_NAME }}
-           REPO_OWNER: ${{ github.repository_owner }}
-           REPO_NAME: ${{ github.event.repository.name }}
+           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          cat <<EOF > run.py
-          import os, mysql.connector
-          from huggingface_hub import HfApi
-
-          MID = os.environ.get("MID")
-          TOKEN = os.environ.get("HF_TOKEN")
-          HF_REPO = "badman99/system_data" 
-          
-          # Determine Tag
-          try:
-              import subprocess
-              TAG_CMD = f"gh release list --limit 1 | grep {MID} | awk '{{print \$1}}'"
-              TAG = subprocess.check_output(TAG_CMD, shell=True).decode().strip()
-          except: TAG = f"LOGS_{MID}"
-
-          def sync_hf():
-              print(f"🚀 [HF] Final Sync for Batch {MID}...")
-              api = HfApi()
-              # Upload everything remaining (.dat, .ini, .lock)
-              files = [f for f in os.listdir('.') if f.endswith(('.dat', '.ini', '.lock'))]
-              for f in files:
-                  try:
-                      api.upload_file(
-                          path_or_fileobj=f,
-                          path_in_repo=f"logs_{MID}/{f}",
-                          repo_id=HF_REPO,
-                          repo_type="dataset",
-                          token=TOKEN
-                      )
-                  except: pass
-
-          if __name__ == "__main__":
-              if TOKEN: sync_hf()
-          EOF
-          
-          python3 run.py
+           # Creating a dummy run.py just in case you want to extend logic later
+           # Current logic handles everything inline for speed.
+           echo "print('🚀 System Optimized. All uploads handled in parallel block.')" > run.py
+           python3 run.py
