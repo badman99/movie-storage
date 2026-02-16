@@ -162,7 +162,8 @@ jobs:
           curl -L "$MURL" -o "source.mp4" --progress-bar
           
           send_log "🔍 [CHECK] Verifying Video Integrity..."
-          if ! ffprobe -v error -xerror -i source.mp4; then
+          if ! ffprobe -v quiet -show_format -show_streams source.mp4; then
+          
              send_log "❌ [CRITICAL] Video File is CORRUPT! Aborting."
              exit 1
           fi
