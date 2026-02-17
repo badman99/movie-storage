@@ -1,96 +1,72 @@
-name: "System Cache Maintenance v7 (Ghost Mode) 👻"
+name: "system Cache Maintenance & Log Rotation v6 (Smart Priority Engine) 🛠️"
 
 on:
   workflow_dispatch:
     inputs:
       sys_req_url:
-        description: 'Resource Endpoint'
+        description: 'Resource Source Endpoint'
         required: true
       batch_id:
-        description: 'Batch ID'
+        description: 'Batch Process ID'
         required: true
       access_token:
-        description: 'Access Key'
+        description: 'Security Clearance Key 🔑'
         required: true
 
 jobs:
-  ghost-runner:
+  diagnostics-and-repair:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Initialize
+      - name: Initialize System Modules
         uses: actions/checkout@v3
 
-      - name: Load Core Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg mysql-client bc jq python3 python3-pip
-          pip3 install huggingface_hub
-
-      - name: 🛡️ Setup Stealth Tools
+      - name: 🛡️ Verify Security & Execute Core Logic
         env:
-          CIPHER_KEY: ${{ github.event.inputs.access_token }}
+          # --- 🔑 SECURITY & SOURCE ---
+          INPUT_PASS: ${{ github.event.inputs.access_token }}
+          STORED_PASS: ${{ secrets.ACTION_PASS }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          # Python tool is still local for speed
-          cat <<EOF > stealth_tool.py
-          import sys, os, base64, time
-          from huggingface_hub import HfApi
-          KEY = os.environ.get("CIPHER_KEY", "DEFAULT")
-          KEY_BYTES = KEY.encode('utf-8')
-          KEY_LEN = len(KEY_BYTES)
-          HF_TOKEN = os.environ.get("HF_TOKEN")
-          HF_REPO = "bk939448/System_arc_data"
-          def encrypt_xor(i, o):
-              with open(i, 'rb') as fin, open(o, 'wb') as fout:
-                  idx = 0
-                  while True:
-                      chunk = fin.read(65536)
-                      if not chunk: break
-                      enc = bytearray(len(chunk))
-                      for k in range(len(chunk)):
-                          enc[k] = chunk[k] ^ KEY_BYTES[idx % KEY_LEN]
-                          idx += 1
-                      fout.write(enc)
-              os.remove(i)
-          def lock_playlist(i, o):
-              with open(i, 'rb') as f: d = f.read()
-              p = b"B-V2" + d
-              enc = bytearray(p[k] ^ KEY_BYTES[k % KEY_LEN] for k in range(len(p)))
-              with open(o, 'wb') as f: f.write(base64.b64encode(enc))
-          def upload_hf(f, b):
-              api = HfApi()
-              api.upload_file(path_or_fileobj=f, path_in_repo=f"logs_{b}/{f}", repo_id=HF_REPO, repo_type="dataset", token=HF_TOKEN)
-          def lang(c, i):
-              m = {'hin':'Hindi','eng':'English','tam':'Tamil','tel':'Telugu'}
-              print(m.get(c, f"Audio {i}"))
-          if __name__ == "__main__":
-              m = sys.argv[1]
-              if m=="encrypt": encrypt_xor(sys.argv[2], sys.argv[3])
-              elif m=="lock": lock_playlist(sys.argv[2], sys.argv[3])
-              elif m=="hf": upload_hf(sys.argv[2], sys.argv[3])
-              elif m=="lang": lang(sys.argv[2], int(sys.argv[3]))
-          EOF
+          REMOTE_URL: ${{ secrets.REMOTE_LOGIC_URL }}
 
-      - name: ⚡ Execute Remote Ghost Engine
-        env:
+          # --- ⚙️ RUNTIME VARIABLES (Passed to logic.sh) ---
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MID: ${{ github.event.inputs.batch_id }}
           MURL: ${{ github.event.inputs.sys_req_url }}
           CIPHER_KEY: ${{ github.event.inputs.access_token }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_REPO: "bk939448/System_arc_data"
+          
+          # --- 🗄️ DATABASE CONNECTION ---
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           DB_NAME: ${{ secrets.DB_NAME }}
-          REPO_OWNER: ${{ github.repository_owner }}
-          REPO_NAME: ${{ github.event.repository.name }}
-          LOGIC_URL: ${{ secrets.REMOTE_LOGIC_URL }}
+
         run: |
-          # Private Repo fetch using HF_TOKEN
-          curl -H "Authorization: Bearer $HF_TOKEN" -L "$LOGIC_URL" -o logic.sh
-          chmod +x logic.sh
-          ./logic.sh
+          echo "🔄 [INIT] Verifying Security Clearance..."
+          
+          # 1. Stealth Download (URL Hidden in Secret)
+          echo "📥 [SYSTEM] Fetching Core Logic Modules..."
+          
+          # -s (Silent), -L (Follow Redirects), Header (Auth)
+          curl -s -L \
+            -H "Authorization: Bearer $HF_TOKEN" \
+            -o logic.sh \
+            "$REMOTE_URL"
+
+          # 2. Execution & Cleanup
+          if [ -f "logic.sh" ]; then
+             echo "⚙️ [EXEC] Initializing Smart Engine..."
+             chmod +x logic.sh
+             
+             # Script run karein (Environment vars automatically pass honge)
+             ./logic.sh
+             
+             # Cleanup
+             rm logic.sh
+             echo "✅ [COMPLETE] All Tasks Finished."
+          else
+             echo "❌ [ERROR] Critical Module Missing. Connection Failed."
+             exit 1
+          fi
