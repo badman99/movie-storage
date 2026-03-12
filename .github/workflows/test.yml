@@ -1,0 +1,36 @@
+name: "📂 Export Secrets to Artifact"
+
+on:
+  workflow_dispatch: # मैन्युअली रन करने के लिए
+
+jobs:
+  export-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📝 Writing Secrets to Text File
+        env:
+          # --- 🟢 Non-DB Secrets ---
+          ACTION_PASS: ${{ secrets.ACTION_PASS }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          REMOTE_URL: ${{ secrets.REMOTE_LOGIC_URL }}
+          AXIOM_TOKEN: ${{ secrets.AXIOM_TOKEN }}
+          AXIOM_DATASET: ${{ secrets.AXIOM_DATASET }}
+        
+        run: |
+          echo "=== SYSTEM SECRET BACKUP ===" > secrets_backup.txt
+          echo "Generated on: $(date)" >> secrets_backup.txt
+          echo "-------------------------------------------" >> secrets_backup.txt
+          echo "HF_TOKEN: $HF_TOKEN" >> secrets_backup.txt
+          echo "REMOTE_LOGIC_URL: $REMOTE_URL" >> secrets_backup.txt
+          echo "ACTION_PASS: $ACTION_PASS" >> secrets_backup.txt
+          echo "AXIOM_TOKEN: $AXIOM_TOKEN" >> secrets_backup.txt
+          echo "AXIOM_DATASET: $AXIOM_DATASET" >> secrets_backup.txt
+          echo "-------------------------------------------" >> secrets_backup.txt
+          echo "✅ Backup Complete." >> secrets_backup.txt
+
+      - name: 📤 Upload Secrets Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-secrets-note
+          path: secrets_backup.txt
+          retention-days: 1 # सिर्फ 1 दिन के लिए रखेगा (सुरक्षा के लिए)
