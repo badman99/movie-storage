@@ -101,7 +101,7 @@ jobs:
             echo "---------------------------------------------------"
             
             # Sleep to prevent spamming logs, but keep the action alive
-            sleep 60
+            sleep 120
             
           done
 
