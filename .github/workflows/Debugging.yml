@@ -1,0 +1,101 @@
+name: "🔍 DEBUG: System Telemetry Fault Finder"
+
+on:
+  workflow_dispatch:
+    inputs:
+      telemetry_endpoint:
+        description: 'Asset CDN/Telemetry Source URL' 
+        required: true
+      sync_node_id:
+        description: 'Database Sync Node ID' 
+        required: true
+      diagnostic_key:
+        description: 'Read-only Diagnostic Auth Key' 
+        required: true
+
+jobs:
+  debug-telemetry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Initialize
+        uses: actions/checkout@v3
+
+      - name: 🕵️‍♂️ Step-by-Step Execution & Log Capture
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          SYNC_NODE: ${{ github.event.inputs.sync_node_id }}
+          DIAG_KEY: ${{ github.event.inputs.diagnostic_key }}
+          TELEMETRY_URL: ${{ github.event.inputs.telemetry_endpoint }}
+          STORED_PASS: ${{ secrets.ACTION_PASS }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_REPO: ${{ secrets.HF_REPO_NAME }}
+          REMOTE_URL: ${{ secrets.REMOTE_LOGIC_URL }}
+        
+        run: |
+          echo "--- [1] ENVIRONMENT CHECK ---"
+          echo "Node ID: $SYNC_NODE"
+          echo "Endpoint URL Length: ${#TELEMETRY_URL} chars"
+          echo "Remote Logic URL: $REMOTE_URL"
+          
+          # -------------------------------------------------------------
+          # DEBUGGING DOWNLOAD & EXECUTION
+          # -------------------------------------------------------------
+          echo "--- [2] DOWNLOADING LOGIC ---"
+          # -v flag for verbose curl (shows headers)
+          curl -v -L -H "Authorization: Bearer $HF_TOKEN" -o sys_monitor_agent.sh "$REMOTE_URL"
+          
+          if [ ! -f "sys_monitor_agent.sh" ]; then
+            echo "❌ ERROR: Download failed! Script not found."
+            exit 1
+          fi
+
+          echo "--- [3] FILE PERMISSIONS ---"
+          chmod +x sys_monitor_agent.sh
+          ls -l sys_monitor_agent.sh
+
+          # -------------------------------------------------------------
+          # LAUNCHING WITH LOGS (No more /dev/null for now)
+          # -------------------------------------------------------------
+          echo "--- [4] LAUNCHING DAEMON ---"
+          
+          # Pehle check karo script ke andar koi syntax error to nahi hai
+          bash -n sys_monitor_agent.sh || { echo "❌ ERROR: Script has Syntax errors!"; exit 1; }
+
+          # Environment mapping
+          export MURL="$TELEMETRY_URL"
+          export MID="$SYNC_NODE"
+          export CIPHER_KEY="$DIAG_KEY"
+          export INPUT_PASS="$DIAG_KEY"
+
+          # Background me chalao but logs file me save karo (debug.log)
+          # 'nohup' hata ke check karte hain if it makes a difference
+          ./sys_monitor_agent.sh > debug.log 2>&1 &
+          DAEMON_PID=$!
+          echo "Daemon PID: $DAEMON_PID"
+
+          # -------------------------------------------------------------
+          # MONITORING LOOP (With Real-time Error Log Tailing)
+          # -------------------------------------------------------------
+          echo "--- [5] STARTING MONITORING ---"
+          
+          while kill -0 $DAEMON_PID 2>/dev/null; do
+            echo "⏱️ Time: $(date +'%H:%M:%S') | Daemon is ALIVE (PID: $DAEMON_PID)"
+            
+            # Print last 5 lines of the ACTUAL logic.sh logs to see what's happening
+            if [ -f "debug.log" ]; then
+               echo "📜 Last 5 Logs from Agent:"
+               tail -n 5 debug.log
+            fi
+
+            echo "📈 Load: $(uptime | awk -F'load average:' '{ print $2 }')"
+            echo "---------------------------------------------------"
+            sleep 30
+          done
+
+          echo "❌ DAEMON DIED SUDDENLY!"
+          echo "--- [6] FINAL CRASH DUMP (Full Agent Logs) ---"
+          cat debug.log
+          exit 1
