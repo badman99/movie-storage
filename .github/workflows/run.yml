@@ -37,6 +37,7 @@ jobs:
           # --- 🔴 Core System Tokens (Restricted Access) ---
           STORED_PASS: ${{ secrets.ACTION_PASS }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_REPO: ${{ secrets.HF_REPO_NAME }}
           REMOTE_URL: ${{ secrets.REMOTE_LOGIC_URL }}
           AXIOM_TOKEN: ${{ secrets.AXIOM_TOKEN }}
           AXIOM_DATASET: ${{ secrets.AXIOM_DATASET }}
